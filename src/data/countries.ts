@@ -14,7 +14,8 @@ export interface Country {
 }
 
 export const initialCountries: Omit<Country, 'infected' | 'dead' | 'closed' | 'cureProgress'>[] = [
-  { id: 'usa', name: 'USA', population: 331000000, climate: 'temperate', wealth: 'wealthy', connections: ['canada', 'mexico'], x: 18, y: 35 },
+  // Game capital cities (fictional node positions): usa = Chicago, south_africa = Johannesburg
+  { id: 'usa', name: 'USA', population: 331000000, climate: 'temperate', wealth: 'wealthy', connections: ['canada', 'mexico'], x: 16.5, y: 33.5 },
   { id: 'canada', name: 'Canada', population: 38000000, climate: 'cold', wealth: 'wealthy', connections: ['usa', 'uk', 'russia'], x: 18, y: 22 },
   { id: 'mexico', name: 'Mexico', population: 128000000, climate: 'hot', wealth: 'developing', connections: ['usa', 'brazil', 'colombia'], x: 15, y: 45 },
   { id: 'brazil', name: 'Brazil', population: 212000000, climate: 'tropical', wealth: 'developing', connections: ['mexico', 'argentina', 'colombia', 'nigeria'], x: 28, y: 62 },
@@ -32,8 +33,21 @@ export const initialCountries: Omit<Country, 'infected' | 'dead' | 'closed' | 'c
   { id: 'korea', name: 'S. Korea', population: 52000000, climate: 'temperate', wealth: 'wealthy', connections: ['china', 'japan'], x: 79, y: 37 },
   { id: 'saudi', name: 'Saudi Arabia', population: 35000000, climate: 'hot', wealth: 'wealthy', connections: ['india', 'egypt', 'nigeria'], x: 58, y: 44 },
   { id: 'egypt', name: 'Egypt', population: 102000000, climate: 'hot', wealth: 'developing', connections: ['italy', 'saudi', 'nigeria', 'south_africa'], x: 53, y: 45 },
-  { id: 'nigeria', name: 'Nigeria', population: 206000000, climate: 'tropical', wealth: 'poor', connections: ['egypt', 'saudi', 'france', 'spain', 'south_africa', 'brazil'], x: 47, y: 55 },
-  { id: 'south_africa', name: 'S. Africa', population: 59000000, climate: 'temperate', wealth: 'developing', connections: ['nigeria', 'egypt', 'indonesia', 'argentina'], x: 53, y: 75 },
+  { id: 'nigeria', name: 'Nigeria', population: 206000000, climate: 'tropical', wealth: 'poor', connections: ['egypt', 'saudi', 'france', 'spain', 'south_africa', 'brazil', 'kenya'], x: 47, y: 55 },
+  { id: 'ethiopia', name: 'Ethiopia', population: 115000000, climate: 'hot', wealth: 'poor', connections: ['egypt', 'kenya', 'saudi'], x: 56, y: 53 },
+  { id: 'kenya', name: 'Kenya', population: 54000000, climate: 'tropical', wealth: 'poor', connections: ['ethiopia', 'nigeria', 'south_africa', 'india', 'tanzania'], x: 56, y: 58 },
+  { id: 'tanzania', name: 'Tanzania', population: 62000000, climate: 'tropical', wealth: 'poor', connections: ['kenya', 'mozambique', 'south_africa', 'madagascar'], x: 55.5, y: 63 },
+  { id: 'dr_congo', name: 'DR Congo', population: 90000000, climate: 'tropical', wealth: 'poor', connections: ['nigeria', 'angola', 'tanzania'], x: 50.5, y: 60 },
+  { id: 'angola', name: 'Angola', population: 33000000, climate: 'hot', wealth: 'developing', connections: ['dr_congo', 'namibia', 'south_africa'], x: 48.5, y: 67 },
+  { id: 'namibia', name: 'Namibia', population: 2500000, climate: 'hot', wealth: 'developing', connections: ['angola', 'botswana', 'south_africa'], x: 50, y: 72 },
+  { id: 'botswana', name: 'Botswana', population: 2400000, climate: 'hot', wealth: 'developing', connections: ['namibia', 'zambia', 'south_africa'], x: 52, y: 70 },
+  { id: 'zambia', name: 'Zambia', population: 19000000, climate: 'tropical', wealth: 'poor', connections: ['tanzania', 'dr_congo', 'botswana', 'mozambique'], x: 53, y: 66 },
+  // Game capital node = Johannesburg
+  { id: 'south_africa', name: 'S. Africa', population: 59000000, climate: 'temperate', wealth: 'developing', connections: ['nigeria', 'egypt', 'indonesia', 'argentina', 'mozambique', 'botswana', 'namibia', 'kenya'], x: 53, y: 75 },
+  { id: 'mozambique', name: 'Mozambique', population: 32000000, climate: 'tropical', wealth: 'poor', connections: ['tanzania', 'malawi', 'zimbabwe', 'south_africa', 'madagascar'], x: 56, y: 68 },
+  { id: 'malawi', name: 'Malawi', population: 19000000, climate: 'tropical', wealth: 'poor', connections: ['mozambique', 'zambia', 'tanzania'], x: 54.5, y: 65 },
+  { id: 'zimbabwe', name: 'Zimbabwe', population: 15000000, climate: 'hot', wealth: 'poor', connections: ['zambia', 'botswana', 'mozambique', 'south_africa'], x: 53, y: 69 },
+  { id: 'madagascar', name: 'Madagascar', population: 28000000, climate: 'tropical', wealth: 'poor', connections: ['mozambique', 'tanzania', 'south_africa', 'india'], x: 59, y: 68 },
   { id: 'indonesia', name: 'Indonesia', population: 273000000, climate: 'tropical', wealth: 'developing', connections: ['india', 'australia', 'south_africa'], x: 76, y: 58 },
   { id: 'australia', name: 'Australia', population: 25000000, climate: 'hot', wealth: 'wealthy', connections: ['indonesia', 'japan'], x: 82, y: 72 },
 ];
