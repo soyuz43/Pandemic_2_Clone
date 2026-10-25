@@ -1,0 +1,749 @@
+From b7020d0d71e4fa1786719c19152e5fa364593feb Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Sun, 25 Oct 2026 20:48:36 +0000
+Subject: [PATCH 1/2] Add flight and shipping transmission layer with
+ auto-closures
+
+- New src/data/routes.ts: Generated fictional air/sea network using gravity model, deterministic hashing, and hub-based topology
+- Updated src/hooks/useGameState.ts: Implemented route-based infection seeding logic, automatic airport/seaport closures on high visibility/outbreaks, and manual closure actions (closeAirports/closeSeaports)
+- Modified src/components/WorldMap.tsx: Added visual overlay for active/shut travel routes, toggle controls for traffic filters, and context menu options for shutting airports/seaports
+- Enhanced src/data/diseaseTypes.ts: Added airTransmission and seaTransmission multipliers to Virus, Bacteria, and Parasite configs
+- Updated src/data/evolutions.ts: Introduced Air Transmission I/II and Water Transmission I/II evolutions that boost specific travel vectors
+- Revised src/components/StatsPanel.tsx: Displayed real-time active flight/ship counts, closed transport stats, and disease-specific travel transmission properties
+---
+ src/App.tsx                   |   6 +-
+ src/components/StatsPanel.tsx |  41 ++++++++
+ src/components/WorldMap.tsx   | 127 +++++++++++++++++++++++-
+ src/data/diseaseTypes.ts      |   9 ++
+ src/data/evolutions.ts        |  14 +--
+ src/data/routes.ts            |  86 ++++++++++++++++
+ src/hooks/useGameState.ts     | 178 +++++++++++++++++++++++++++++++++-
+ 7 files changed, 449 insertions(+), 12 deletions(-)
+ create mode 100644 src/data/routes.ts
+
+diff --git a/src/App.tsx b/src/App.tsx
+index f037c32..3a7587e 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -10,7 +10,7 @@ import GameOverScreen from './components/GameOverScreen';
+ import HelpOverlay from './components/HelpOverlay';
+ 
+ export default function App() {
+-  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions, closeBorders } = useGameState();
++  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions, closeBorders, closeAirports, closeSeaports } = useGameState();
+   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
+   const [showStartScreen, setShowStartScreen] = useState(true);
+   const [showHelp, setShowHelp] = useState(false);
+@@ -88,6 +88,10 @@ export default function App() {
+               onSelectCountry={setSelectedCountryId}
+               startCountry={gameState.startCountry}
+               onCloseBorders={closeBorders}
++              onCloseAirports={closeAirports}
++              onCloseSeaports={closeSeaports}
++              closedAirports={gameState.closedAirports}
++              closedSeaports={gameState.closedSeaports}
+               dnaPoints={gameState.dnaPoints}
+             />
+           </div>
+diff --git a/src/components/StatsPanel.tsx b/src/components/StatsPanel.tsx
+index 922f291..89532fa 100644
+--- a/src/components/StatsPanel.tsx
++++ b/src/components/StatsPanel.tsx
+@@ -99,6 +99,10 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
+             <span className="data-label">Borders Closed</span>
+             <span className="data-value text-red">{closedCountries}/{gameState.countries.length}</span>
+           </div>
++          <div className="data-row">
++            <span className="data-label">Airports / Seaports Shut</span>
++            <span className="data-value text-red">{gameState.closedAirports.length} ✈️ / {gameState.closedSeaports.length} ⚓</span>
++          </div>
+         </div>
+ 
+         {/* Disease type traits */}
+@@ -178,6 +182,43 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
+               <span className="data-label">Stealth</span>
+               <span className="data-value text-cyan-400">{(gameState.stealth * 100).toFixed(0)}%</span>
+             </div>
++            <div className="data-row">
++              <span className="data-label">Flight Spread</span>
++              <span className={`data-value ${gameState.airTransmission >= 1 ? 'text-green' : 'text-dim'}`}>
++                {(gameState.airTransmission * 100).toFixed(0)}%
++              </span>
++            </div>
++            <div className="data-row">
++              <span className="data-label">Shipping Spread</span>
++              <span className={`data-value ${gameState.seaTransmission >= 1 ? 'text-green' : 'text-dim'}`}>
++                {(gameState.seaTransmission * 100).toFixed(0)}%
++              </span>
++            </div>
++          </div>
++        </div>
++
++        {/* Travel network */}
++        <div className="pt-2 border-t border-subtle">
++          <div className="text-[10px] text-dim uppercase tracking-wider font-bold mb-2">
++            ✈️⚓ Travel Network
++          </div>
++          <div className="space-y-1 text-[10px]">
++            <div className="data-row">
++              <span className="data-label">Active Flights/day</span>
++              <span className="data-value text-blue">{formatNumber(gameState.activeFlights)}</span>
++            </div>
++            <div className="data-row">
++              <span className="data-label">Active Shipments/day</span>
++              <span className="data-value text-blue">{formatNumber(gameState.activeShips)}</span>
++            </div>
++            <div className="data-row">
++              <span className="data-label">Airports Shut</span>
++              <span className="data-value text-red">{gameState.closedAirports.length}/{gameState.countries.length}</span>
++            </div>
++            <div className="data-row">
++              <span className="data-label">Seaports Sealed</span>
++              <span className="data-value text-red">{gameState.closedSeaports.length}/{gameState.countries.length}</span>
++            </div>
+           </div>
+         </div>
+ 
+diff --git a/src/components/WorldMap.tsx b/src/components/WorldMap.tsx
+index d7a3b10..3471c28 100644
+--- a/src/components/WorldMap.tsx
++++ b/src/components/WorldMap.tsx
+@@ -4,8 +4,11 @@ import {
+   Geographies,
+   Geography,
+   ZoomableGroup,
++  Marker,
++  Line,
+ } from 'react-simple-maps';
+ import { Country } from '../data/countries';
++import { allRoutes } from '../data/routes';
+ 
+ interface WorldMapProps {
+   countries: Country[];
+@@ -13,6 +16,10 @@ interface WorldMapProps {
+   onSelectCountry: (id: string) => void;
+   startCountry: string | null;
+   onCloseBorders?: (id: string) => void;
++  onCloseAirports?: (id: string) => void;
++  onCloseSeaports?: (id: string) => void;
++  closedAirports?: string[];
++  closedSeaports?: string[];
+   dnaPoints?: number;
+ }
+ 
+@@ -68,7 +75,23 @@ function getCountryColor(country: Country): string {
+ 
+ const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+ 
+-export default function WorldMap({ countries, selectedCountry, onSelectCountry, startCountry, onCloseBorders, dnaPoints = 0 }: WorldMapProps) {
++// Fictional country node coordinates (same space as countries.ts) for travel lines.
++const NODE_POS: Record<string, [number, number]> = {
++  usa: [-100, 40], canada: [-98, 58], mexico: [-102, 24], brazil: [-55, -10],
++  argentina: [-65, -35], colombia: [-74, 3], uk: [-2, 53], france: [2, 47],
++  germany: [10, 51], spain: [-4, 40], italy: [12.5, 42], russia: [60, 55],
++  china: [105, 35], india: [78, 22], japan: [138, 37], korea: [127, 36],
++  saudi: [45, 24], egypt: [30, 27], nigeria: [8, 10], south_africa: [25, -29],
++  indonesia: [115, -3], australia: [134, -25],
++};
++
++type TravelFilter = 'all' | 'air' | 'sea';
++
++export default function WorldMap({
++  countries, selectedCountry, onSelectCountry, startCountry,
++  onCloseBorders, onCloseAirports, onCloseSeaports,
++  closedAirports = [], closedSeaports = [], dnaPoints = 0,
++}: WorldMapProps) {
+   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+     visible: false,
+     x: 0,
+@@ -76,6 +99,8 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry,
+     countryId: null,
+   });
+   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
++  const [showTravel, setShowTravel] = useState(true);
++  const [travelFilter, setTravelFilter] = useState<TravelFilter>('all');
+ 
+   const countryLookup = useMemo(() => {
+     const lookup: Record<string, Country> = {};
+@@ -86,6 +111,15 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry,
+     return lookup;
+   }, [countries]);
+ 
++  const infectedIds = useMemo(() => new Set(countries.filter(c => c.infected > 0).map(c => c.id)), [countries]);
++  const closedAirportSet = useMemo(() => new Set(closedAirports), [closedAirports]);
++  const closedSeaportSet = useMemo(() => new Set(closedSeaports), [closedSeaports]);
++
++  // Routes to draw on the overlay (only those touching an infected country get highlighted)
++  const visibleRoutes = useMemo(() => {
++    return allRoutes.filter(r => travelFilter === 'all' || r.kind === travelFilter);
++  }, [travelFilter]);
++
+   const hoveredCountryData = hoveredCountry ? countries.find(c => c.id === hoveredCountry) : null;
+   const selectedCountryData = selectedCountry ? countries.find(c => c.id === selectedCountry) : null;
+ 
+@@ -165,9 +199,72 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry,
+               })
+             }
+           </Geographies>
++
++          {/* ---- Flight & ship traffic overlay ---- */}
++          {showTravel && visibleRoutes.map(route => {
++            const from = NODE_POS[route.from];
++            const to = NODE_POS[route.to];
++            if (!from || !to) return null;
++
++            const isAir = route.kind === 'air';
++            const shut =
++              isAir
++                ? closedAirportSet.has(route.from) || closedAirportSet.has(route.to)
++                : closedSeaportSet.has(route.from) || closedSeaportSet.has(route.to);
++            const touchingInfection = infectedIds.has(route.from) || infectedIds.has(route.to);
++            const active = !shut && touchingInfection;
++
++            return (
++              <Line
++                key={route.id}
++                from={from}
++                to={to}
++                stroke={shut ? '#4a4a4a' : active ? (isAir ? '#ff5555' : '#ff9944') : isAir ? '#3d6b8f' : '#2f5a4f'}
++                strokeWidth={active ? Math.min(2.5, 0.6 + route.traffic / 250) : 0.5}
++                strokeDasharray={shut ? '2 3' : active ? '6 3' : undefined}
++                opacity={shut ? 0.35 : active ? 0.9 : 0.4}
++                style={{ pointerEvents: 'none' } as React.CSSProperties}
++              />
++            );
++          })}
++
++          {/* Airport / seaport status markers */}
++          {showTravel && countries.map(c => {
++            const pos = NODE_POS[c.id];
++            if (!pos) return null;
++            const airportShut = closedAirportSet.has(c.id) || c.closed;
++            const portShut = closedSeaportSet.has(c.id) || c.closed;
++            return (
++              <Marker key={`mk-${c.id}`} coordinates={[pos[0], pos[1] - 2.5]} style={{ pointerEvents: 'none' }}>
++                <text textAnchor="middle" fontSize={airportShut ? 7 : 6} opacity={airportShut ? 0.5 : 0.95}>
++                  {airportShut ? '🛬' : '✈️'}{portShut ? '' : ' ⚓'}
++                </text>
++              </Marker>
++            );
++          })}
+         </ZoomableGroup>
+       </ComposableMap>
+ 
++      {/* Travel overlay controls */}
++      <div className="absolute top-2 right-2 flex gap-1 z-10">
++        <button
++          className={`btn text-[9px] px-2 py-0.5 ${showTravel ? 'btn-primary' : ''}`}
++          onClick={() => setShowTravel(v => !v)}
++          title="Toggle flight & shipping routes"
++        >
++          ✈️⚓ Traffic {showTravel ? 'ON' : 'OFF'}
++        </button>
++        {showTravel && (['all', 'air', 'sea'] as TravelFilter[]).map(f => (
++          <button
++            key={f}
++            className={`btn text-[9px] px-2 py-0.5 ${travelFilter === f ? 'btn-primary' : ''}`}
++            onClick={() => setTravelFilter(f)}
++          >
++            {f === 'all' ? 'All' : f === 'air' ? '✈️ Air' : '⚓ Sea'}
++          </button>
++        ))}
++      </div>
++
+       {/* Hover tooltip */}
+       {hoveredCountryData && !contextMenu.visible && (
+         <div className="tooltip top-2 left-2">
+@@ -240,6 +337,34 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry,
+                 🔒 Close Borders ({country.wealth === 'wealthy' ? 15 : country.wealth === 'developing' ? 10 : 5} DNA)
+               </button>
+             )}
++            {!country.closed && !closedAirportSet.has(country.id) && onCloseAirports && (
++              <button
++                className="context-menu-item w-full text-left text-blue hover:bg-blue/10 cursor-pointer"
++                onClick={() => {
++                  onCloseAirports(country.id);
++                  closeContextMenu();
++                }}
++              >
++                ✈️🚫 Shut Airports ({country.wealth === 'wealthy' ? 8 : country.wealth === 'developing' ? 6 : 4} DNA)
++              </button>
++            )}
++            {closedAirportSet.has(country.id) && !country.closed && (
++              <div className="context-menu-item text-dim">✈️ Airports shut</div>
++            )}
++            {!country.closed && !closedSeaportSet.has(country.id) && onCloseSeaports && (
++              <button
++                className="context-menu-item w-full text-left text-blue hover:bg-blue/10 cursor-pointer"
++                onClick={() => {
++                  onCloseSeaports(country.id);
++                  closeContextMenu();
++                }}
++              >
++                ⚓🚫 Quarantine Seaports ({country.wealth === 'wealthy' ? 6 : country.wealth === 'developing' ? 5 : 3} DNA)
++              </button>
++            )}
++            {closedSeaportSet.has(country.id) && !country.closed && (
++              <div className="context-menu-item text-dim">⚓ Seaports quarantined</div>
++            )}
+             <div className="context-menu-item text-dim">
+               Connections: {country.connections.length}
+             </div>
+diff --git a/src/data/diseaseTypes.ts b/src/data/diseaseTypes.ts
+index 55276fd..737d84e 100644
+--- a/src/data/diseaseTypes.ts
++++ b/src/data/diseaseTypes.ts
+@@ -16,6 +16,9 @@ export interface DiseaseTypeConfig {
+   // Special traits
+   mutationChance: number; // Chance of random symptom evolution per day
+   stealthBonus: number; // Reduces visibility gain from symptoms
++  // Travel transmission: how efficiently the pathogen rides planes vs. ships
++  airTransmission: number; // multiplier on flight-based seeding (1 = normal)
++  seaTransmission: number; // multiplier on shipping-based seeding (1 = normal)
+ }
+ 
+ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
+@@ -31,6 +34,8 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
+     climateResistanceBonus: -0.2,
+     mutationChance: 0.02, // 2% chance per day of random mutation
+     stealthBonus: 0,
++    airTransmission: 1.5, // coughed into cabin air — loves planes
++    seaTransmission: 0.7,
+   },
+   bacteria: {
+     id: 'bacteria',
+@@ -44,6 +49,8 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
+     climateResistanceBonus: 0,
+     mutationChance: 0.005,
+     stealthBonus: 0.05,
++    airTransmission: 1.0,
++    seaTransmission: 1.2, // rides in cargo holds & contaminated water supplies
+   },
+   parasite: {
+     id: 'parasite',
+@@ -57,6 +64,8 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
+     climateResistanceBonus: 0.25,
+     mutationChance: 0.001,
+     stealthBonus: 0.2, // 20% reduced visibility gain from symptoms
++    airTransmission: 0.6, // adult parasites can't fly
++    seaTransmission: 1.5, // stowaways in ballast water and cargo
+   },
+ };
+ 
+diff --git a/src/data/evolutions.ts b/src/data/evolutions.ts
+index f7959cf..85f77e9 100644
+--- a/src/data/evolutions.ts
++++ b/src/data/evolutions.ts
+@@ -13,6 +13,8 @@ export interface Evolution {
+     drugResistance?: number;
+     visibility?: number;
+     stealth?: number;
++    airTransmission?: number; // additive boost to flight seeding power
++    seaTransmission?: number; // additive boost to shipping seeding power
+   };
+   requires?: string[];
+ }
+@@ -27,13 +29,13 @@ export const evolutions: Evolution[] = [
+   { id: 'necrosis', name: 'Necrosis', description: '+20% severity, +15% lethality', category: 'symptom', cost: 25, effect: { severity: 0.20, lethality: 0.15, visibility: 0.10 }, requires: ['hemorrhage'] },
+   { id: 'coma', name: 'Coma', description: '+25% severity, +20% lethality', category: 'symptom', cost: 40, effect: { severity: 0.25, lethality: 0.20, visibility: 0.12 }, requires: ['necrosis'] },
+   
+-  // Transmission
+-  { id: 'air1', name: 'Air Transmission I', description: '+10% infectivity', category: 'transmission', cost: 5, effect: { infectivity: 0.10 } },
+-  { id: 'air2', name: 'Air Transmission II', description: '+20% infectivity', category: 'transmission', cost: 15, effect: { infectivity: 0.20 }, requires: ['air1'] },
+-  { id: 'water1', name: 'Water Transmission I', description: '+10% infectivity', category: 'transmission', cost: 5, effect: { infectivity: 0.10 } },
+-  { id: 'water2', name: 'Water Transmission II', description: '+20% infectivity', category: 'transmission', cost: 15, effect: { infectivity: 0.20 }, requires: ['water1'] },
++  // Transmission — travel network boosters (air/sea seeding power)
++  { id: 'air1', name: 'Air Transmission I', description: '+10% infectivity, doubles flight transmission', category: 'transmission', cost: 5, effect: { infectivity: 0.10, airTransmission: 1.0 } },
++  { id: 'air2', name: 'Air Transmission II', description: '+20% infectivity, triples flight transmission', category: 'transmission', cost: 15, effect: { infectivity: 0.20, airTransmission: 2.0 }, requires: ['air1'] },
++  { id: 'water1', name: 'Water Transmission I', description: '+10% infectivity, doubles shipping transmission', category: 'transmission', cost: 5, effect: { infectivity: 0.10, seaTransmission: 1.0 } },
++  { id: 'water2', name: 'Water Transmission II', description: '+20% infectivity, triples shipping transmission', category: 'transmission', cost: 15, effect: { infectivity: 0.20, seaTransmission: 2.0 }, requires: ['water1'] },
+   { id: 'blood', name: 'Blood Transmission', description: '+15% infectivity, +5% severity', category: 'transmission', cost: 10, effect: { infectivity: 0.15, severity: 0.05 } },
+-  { id: 'insect', name: 'Insect Transmission', description: '+15% infectivity', category: 'transmission', cost: 12, effect: { infectivity: 0.15 } },
++  { id: 'insect', name: 'Insect Transmission', description: '+15% infectivity, boosts both flight and shipping spread', category: 'transmission', cost: 12, effect: { infectivity: 0.15, airTransmission: 0.5, seaTransmission: 0.5 } },
+   { id: 'rodent', name: 'Rodent Transmission', description: '+12% infectivity', category: 'transmission', cost: 10, effect: { infectivity: 0.12 } },
+   { id: 'livestock', name: 'Livestock Transmission', description: '+12% infectivity', category: 'transmission', cost: 10, effect: { infectivity: 0.12 } },
+   
+diff --git a/src/data/routes.ts b/src/data/routes.ts
+new file mode 100644
+index 0000000..d33473e
+--- /dev/null
++++ b/src/data/routes.ts
+@@ -0,0 +1,86 @@
++// Fictional flight & shipping network for the game world.
++// Coordinates (x, y) are in the same 0-100 space as the country nodes in countries.ts.
++
++export type RouteKind = 'air' | 'sea';
++
++export interface TradeRoute {
++  id: string;
++  kind: RouteKind;
++  from: string;   // country id
++  to: string;     // country id
++  traffic: number; // relative passenger/cargo volume per day (game units)
++}
++
++// Hub airports and ports used by the auto-generated route network below.
++const AIR_HUBS = ['usa', 'uk', 'france', 'germany', 'china', 'japan', 'india', 'brazil', 'canada', 'saudi', 'egypt', 'australia', 'korea', 'russia', 'mexico', 'nigeria', 'spain', 'italy', 'argentina', 'south_africa', 'indonesia'];
++const SEA_HUBS = ['usa', 'china', 'japan', 'india', 'brazil', 'nigeria', 'egypt', 'australia', 'mexico', 'spain', 'france', 'uk', 'russia', 'indonesia', 'south_africa', 'canada', 'saudi', 'korea', 'argentina', 'colombia'];
++
++const POPULATION: Record<string, number> = {
++  usa: 331, canada: 38, mexico: 128, brazil: 212, argentina: 45, colombia: 51,
++  uk: 67, france: 67, germany: 83, spain: 47, italy: 60, russia: 144, china: 1400,
++  india: 1380, japan: 126, korea: 52, saudi: 35, egypt: 102, nigeria: 206,
++  south_africa: 59, indonesia: 273, australia: 25,
++};
++
++function distance(a: string, b: string): number {
++  const pos: Record<string, [number, number]> = {
++    usa: [18, 35], canada: [18, 22], mexico: [15, 45], brazil: [28, 62], argentina: [25, 78],
++    colombia: [20, 55], uk: [44, 28], france: [46, 34], germany: [50, 30], spain: [43, 38],
++    italy: [51, 37], russia: [65, 22], china: [74, 38], india: [68, 45], japan: [82, 36],
++    korea: [79, 37], saudi: [58, 44], egypt: [53, 45], nigeria: [47, 55], south_africa: [53, 75],
++    indonesia: [76, 58], australia: [82, 72],
++  };
++  const [ax, ay] = pos[a];
++  const [bx, by] = pos[b];
++  return Math.hypot(ax - bx, ay - by);
++}
++
++// Deterministic pseudo-random (so routes are stable between reloads/ticks).
++function hash(str: string): number {
++  let h = 2166136261;
++  for (let i = 0; i < str.length; i++) {
++    h ^= str.charCodeAt(i);
++    h = Math.imul(h, 16777619);
++  }
++  return ((h >>> 0) % 1000) / 1000;
++}
++
++function buildRoutes(kind: RouteKind, hubs: string[], maxLinksPerHub: number, linkRadius: number): TradeRoute[] {
++  const seen = new Set<string>();
++  const routes: TradeRoute[] = [];
++  for (const a of hubs) {
++    // Connect each hub to its nearest eligible partners within radius.
++    const partners = hubs
++      .filter(b => b !== a && distance(a, b) <= linkRadius)
++      .sort((p, q) => distance(a, p) - distance(a, q))
++      .slice(0, maxLinksPerHub);
++    for (const b of partners) {
++      const key = [a, b].sort().join('-');
++      if (seen.has(key)) continue;
++      seen.add(key);
++      const base = Math.sqrt(POPULATION[a] * POPULATION[b]); // gravity model
++      const noise = 0.7 + hash(`${kind}-${key}`) * 0.6;
++      routes.push({
++        id: `${kind}-${key}`,
++        kind,
++        from: a,
++        to: b,
++        traffic: Math.max(1, Math.round(base * noise * (kind === 'air' ? 0.5 : 0.8))),
++      });
++    }
++  }
++  return routes;
++}
++
++export const airRoutes: TradeRoute[] = buildRoutes('air', AIR_HUBS, 4, 45);
++export const seaRoutes: TradeRoute[] = buildRoutes('sea', SEA_HUBS, 4, 50);
++
++export const allRoutes: TradeRoute[] = [...airRoutes, ...seaRoutes];
++
++export function getRoutesForCountry(countryId: string): TradeRoute[] {
++  return allRoutes.filter(r => r.from === countryId || r.to === countryId);
++}
++
++export function totalNetworkTraffic(): number {
++  return allRoutes.reduce((sum, r) => sum + r.traffic, 0);
++}
+diff --git a/src/hooks/useGameState.ts b/src/hooks/useGameState.ts
+index a2a4ea0..eeeabdd 100644
+--- a/src/hooks/useGameState.ts
++++ b/src/hooks/useGameState.ts
+@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
+ import { Country, initialCountries } from '../data/countries';
+ import { evolutions, Evolution } from '../data/evolutions';
+ import { DiseaseType, getDiseaseType } from '../data/diseaseTypes';
++import { allRoutes } from '../data/routes';
+ 
+ export interface GameState {
+   countries: Country[];
+@@ -20,6 +21,8 @@ export interface GameState {
+   drugResistance: number;
+   visibility: number;
+   stealth: number;
++  airTransmission: number; // pathogen's flight-spreading power (base + evolutions)
++  seaTransmission: number; // pathogen's shipping-spreading power (base + evolutions)
+   day: number;
+   gameSpeed: number;
+   isRunning: boolean;
+@@ -28,6 +31,10 @@ export interface GameState {
+   news: NewsItem[];
+   cureStarted: boolean;
+   startCountry: string | null;
++  closedAirports: string[];   // country ids whose airports are shut (blocks air seeding)
++  closedSeaports: string[];   // country ids whose seaports are shut (blocks sea seeding)
++  activeFlights: number;      // live stats for the travel overlay / HUD
++  activeShips: number;
+ }
+ 
+ export interface NewsItem {
+@@ -39,6 +46,12 @@ export interface NewsItem {
+ const INITIAL_DNA = 15;
+ const DNA_PER_INFECTED = 0.1;
+ 
++// Travel network tuning (fictional game values)
++const AIR_BASE_POWER = 0.6;   // baseline flight-spreading power of any pathogen
++const SEA_BASE_POWER = 0.4;   // baseline shipping-spreading power
++const TRAFFIC_SCALE = 300;    // normalizer: route traffic / TRAFFIC_SCALE ≈ per-route seeding chance factor
++const OUTBREAK_VISIBILITY_THRESHOLD = 0.35; // visible outbreaks trigger automatic closures
++
+ export function useGameState() {
+   const [gameState, setGameState] = useState<GameState>({
+     countries: [],
+@@ -57,6 +70,8 @@ export function useGameState() {
+     drugResistance: 0,
+     visibility: 0,
+     stealth: 0,
++    airTransmission: AIR_BASE_POWER,
++    seaTransmission: SEA_BASE_POWER,
+     day: 1,
+     gameSpeed: 1,
+     isRunning: false,
+@@ -65,6 +80,10 @@ export function useGameState() {
+     news: [],
+     cureStarted: false,
+     startCountry: null,
++    closedAirports: [],
++    closedSeaports: [],
++    activeFlights: 0,
++    activeShips: 0,
+   });
+ 
+   const intervalRef = useRef<number | null>(null);
+@@ -95,6 +114,12 @@ export function useGameState() {
+       dnaPoints: INITIAL_DNA,
+       infectivity: diseaseConfig.startingInfectivity,
+       visibility: Math.max(0, diseaseConfig.startingVisibility),
++      airTransmission: AIR_BASE_POWER * diseaseConfig.airTransmission,
++      seaTransmission: SEA_BASE_POWER * diseaseConfig.seaTransmission,
++      closedAirports: [],
++      closedSeaports: [],
++      activeFlights: 0,
++      activeShips: 0,
+       news: [{ day: 1, text: `${diseaseName} (${diseaseConfig.name}) has been identified in ${countries.find(c => c.id === startCountryId)?.name}.`, type: 'info' }],
+     }));
+   }, []);
+@@ -133,6 +158,8 @@ export function useGameState() {
+         drugResistance: Math.min(1, prev.drugResistance + (evo.effect.drugResistance || 0)),
+         visibility: Math.min(1, Math.max(0, prev.visibility + visibilityGain - (evo.effect.stealth || 0))),
+         stealth: Math.min(1, prev.stealth + (evo.effect.stealth || 0)),
++        airTransmission: prev.airTransmission + (evo.effect.airTransmission || 0),
++        seaTransmission: prev.seaTransmission + (evo.effect.seaTransmission || 0),
+         news: newNews.slice(0, 50),
+       };
+     });
+@@ -145,6 +172,67 @@ export function useGameState() {
+       const newCountries = prev.countries.map(c => ({ ...c }));
+       let newDna = prev.dnaPoints;
+       const newNews: NewsItem[] = [];
++      const countryById: Record<string, Country> = {};
++      newCountries.forEach(c => { countryById[c.id] = c; });
++
++      // Travel network state for this day (airports/seaports closed by panic)
++      const closedAirports = new Set(prev.closedAirports);
++      const closedSeaports = new Set(prev.closedSeaports);
++      let flightsToday = 0;
++      let shipsToday = 0;
++
++      // ---- FLIGHT & SHIP TRAFFIC LAYER ----
++      // Every open route carries traffic each day. If the origin has a meaningful
++      // outbreak and the destination is still clean, there is a chance an infected
++      // traveler/boarder seeds the disease there. Seeding power depends on:
++      //   route traffic (volume), pathogen travel transmission (type + evolutions),
++      //   infectivity, stealth (undetected travelers slip past screening),
++      //   and whether either end has shut its airports/seaports.
++      allRoutes.forEach(route => {
++        const origin = countryById[route.from];
++        const dest = countryById[route.to];
++        if (!origin || !dest) return;
++
++        const isAir = route.kind === 'air';
++        const transportClosed =
++          origin.closed || dest.closed ||
++          (isAir ? (closedAirports.has(origin.id) || closedAirports.has(dest.id))
++                 : (closedSeaports.has(origin.id) || closedSeaports.has(dest.id)));
++
++        // Traffic still flies/sails between open countries — it just can't seed
++        // across a shut frontier. Count live traffic for the HUD/overlay.
++        if (!transportClosed) {
++          if (isAir) flightsToday += route.traffic;
++          else shipsToday += route.traffic;
++        }
++
++        if (transportClosed) return;            // nothing crosses a closed frontier
++        if (dest.infected > 0) return;          // already seeded, no news spam
++        if (origin.infected <= 0) return;
++
++        const originRatio = origin.infected / origin.population;
++        if (originRatio < 0.0005) return;       // too few cases to board anything
++
++        const power = isAir ? prev.airTransmission : prev.seaTransmission;
++        const volumeFactor = Math.min(2, route.traffic / TRAFFIC_SCALE);
++        const stealthAssist = 1 + prev.stealth * 0.8; // undetected carriers pass screening
++        const chance = power * volumeFactor * prev.infectivity * stealthAssist *
++                       Math.min(1, originRatio * 40) * 0.08 * prev.gameSpeed;
++
++        if (Math.random() < chance) {
++          const seedCount = Math.max(3, Math.floor(Math.min(origin.infected * 0.005, dest.population * 0.0001)) || 3);
++          dest.infected = Math.max(dest.infected, seedCount);
++          if (newNews.length < 5) {
++            newNews.push({
++              day: prev.day,
++              text: isAir
++                ? `${prev.diseaseName} reached ${dest.name} aboard a flight from ${origin.name}!`
++                : `${prev.diseaseName} reached ${dest.name} hidden aboard cargo ships from ${origin.name}!`,
++              type: 'danger',
++            });
++          }
++        }
++      });
+ 
+       // Spread disease
+       const diseaseConfig = getDiseaseType(prev.diseaseType);
+@@ -205,11 +293,39 @@ export function useGameState() {
+         }
+       });
+ 
+-      // Countries may close borders based on visibility (reduced by stealth)
++      // Countries may close borders based on visibility (reduced by stealth).
++      // Visible outbreaks ALSO trigger automatic airport & seaport closures —
++      // the classic "panic response" that strangles the travel network.
+       const effectiveVisibility = Math.max(0, prev.visibility - prev.stealth * 0.8);
+       newCountries.forEach(country => {
+-        if (country.closed) return;
+         const wealthMod = country.wealth === 'wealthy' ? 0.3 : country.wealth === 'developing' ? 0.15 : 0.05;
++        const outbreakRatio = country.infected / country.population;
++
++        // Automatic airport closure: high local outbreak + disease is visible.
++        if (!closedAirports.has(country.id) && outbreakRatio > 0.02 &&
++            effectiveVisibility > OUTBREAK_VISIBILITY_THRESHOLD &&
++            Math.random() < wealthMod * 0.3 * prev.gameSpeed) {
++          closedAirports.add(country.id);
++          newNews.push({
++            day: prev.day,
++            text: `${country.name} has shut its airports after visible outbreaks! ✈️🚫`,
++            type: 'warning',
++          });
++        }
++
++        // Automatic seaport closure: rarer — only at severe outbreak levels.
++        if (!closedSeaports.has(country.id) && outbreakRatio > 0.10 &&
++            effectiveVisibility > OUTBREAK_VISIBILITY_THRESHOLD + 0.15 &&
++            Math.random() < wealthMod * 0.15 * prev.gameSpeed) {
++          closedSeaports.add(country.id);
++          newNews.push({
++            day: prev.day,
++            text: `${country.name} has sealed its seaports to incoming cargo! ⚓🚫`,
++            type: 'warning',
++          });
++        }
++
++        if (country.closed) return;
+         const closeChance = effectiveVisibility * wealthMod * 0.02 * prev.gameSpeed;
+         if (country.infected > country.population * 0.05 && Math.random() < closeChance) {
+           country.closed = true;
+@@ -328,6 +444,10 @@ export function useGameState() {
+         gameWon: allDead,
+         news: [...newNews, ...prev.news].slice(0, 50),
+         cureStarted,
++        closedAirports: Array.from(closedAirports),
++        closedSeaports: Array.from(closedSeaports),
++        activeFlights: flightsToday,
++        activeShips: shipsToday,
+       };
+     });
+   }, []);
+@@ -340,7 +460,7 @@ export function useGameState() {
+     setGameState(prev => ({ ...prev, isRunning: !prev.isRunning }));
+   }, []);
+ 
+-  // Manual border closure (costs DNA)
++  // Manual border closure (costs DNA) — shuts land borders AND all travel links.
+   const closeBorders = useCallback((countryId: string) => {
+     setGameState(prev => {
+       const country = prev.countries.find(c => c.id === countryId);
+@@ -356,7 +476,7 @@ export function useGameState() {
+       const newNews = [...prev.news];
+       newNews.unshift({
+         day: prev.day,
+-        text: `You have closed ${country.name}'s borders! (-${cost} DNA)`,
++        text: `You have closed ${country.name}'s borders! Flights and shipping suspended. (-${cost} DNA)`,
+         type: 'warning',
+       });
+ 
+@@ -369,6 +489,54 @@ export function useGameState() {
+     });
+   }, []);
+ 
++  // Emergency airport shutdown (cheaper than full border closure, air only).
++  const closeAirports = useCallback((countryId: string) => {
++    setGameState(prev => {
++      const country = prev.countries.find(c => c.id === countryId);
++      if (!country || prev.closedAirports.includes(countryId)) return prev;
++      const cost = country.wealth === 'wealthy' ? 8 : country.wealth === 'developing' ? 6 : 4;
++      if (prev.dnaPoints < cost) return prev;
++
++      const newNews = [...prev.news];
++      newNews.unshift({
++        day: prev.day,
++        text: `${country.name} has shut its airports by emergency decree. ✈️🚫 (-${cost} DNA)`,
++        type: 'warning',
++      });
++
++      return {
++        ...prev,
++        dnaPoints: prev.dnaPoints - cost,
++        closedAirports: [...prev.closedAirports, countryId],
++        news: newNews.slice(0, 50),
++      };
++    });
++  }, []);
++
++  // Emergency seaport quarantine (sea only).
++  const closeSeaports = useCallback((countryId: string) => {
++    setGameState(prev => {
++      const country = prev.countries.find(c => c.id === countryId);
++      if (!country || prev.closedSeaports.includes(countryId)) return prev;
++      const cost = country.wealth === 'wealthy' ? 6 : country.wealth === 'developing' ? 5 : 3;
++      if (prev.dnaPoints < cost) return prev;
++
++      const newNews = [...prev.news];
++      newNews.unshift({
++        day: prev.day,
++        text: `${country.name} has quarantined its seaports — no cargo boarding. ⚓🚫 (-${cost} DNA)`,
++        type: 'warning',
++      });
++
++      return {
++        ...prev,
++        dnaPoints: prev.dnaPoints - cost,
++        closedSeaports: [...prev.closedSeaports, countryId],
++        news: newNews.slice(0, 50),
++      };
++    });
++  }, []);
++
+   // Game loop
+   useEffect(() => {
+     if (gameState.isRunning && !gameState.gameOver) {
+@@ -399,5 +567,7 @@ export function useGameState() {
+     togglePause,
+     getAvailableEvolutions,
+     closeBorders,
++    closeAirports,
++    closeSeaports,
+   };
+ }
+-- 
+2.39.5
+
