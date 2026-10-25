@@ -1,3 +1,10 @@
+import React, { useMemo } from 'react';
+import {
+  ComposableMap,
+  Geographies,
+  Geography,
+  ZoomableGroup,
+} from 'react-simple-maps';
 import { Country } from '../data/countries';
 
 interface WorldMapProps {
@@ -7,8 +14,39 @@ interface WorldMapProps {
   startCountry: string | null;
 }
 
+// Map our country IDs to ISO 3166-1 Alpha-3 codes used by the TopoJSON
+const countryIdToIso: Record<string, string> = {
+  usa: '840',
+  canada: '124',
+  mexico: '484',
+  brazil: '076',
+  argentina: '032',
+  colombia: '170',
+  uk: '826',
+  france: '250',
+  germany: '276',
+  spain: '724',
+  italy: '380',
+  russia: '643',
+  china: '156',
+  india: '356',
+  japan: '392',
+  korea: '410',
+  saudi: '682',
+  egypt: '818',
+  nigeria: '566',
+  south_africa: '710',
+  indonesia: '360',
+  australia: '036',
+};
+
+// Reverse mapping
+const isoToCountryId: Record<string, string> = Object.fromEntries(
+  Object.entries(countryIdToIso).map(([k, v]) => [v, k])
+);
+
 function getCountryColor(country: Country): string {
-  if (country.closed) return '#666666';
+  if (country.closed) return '#4a4a4a';
   if (country.dead > country.population * 0.5) return '#1a0000';
   if (country.infected <= 0) return '#2d5a27';
   
@@ -20,117 +58,111 @@ function getCountryColor(country: Country): string {
   return '#ffdd00';
 }
 
-function getCountryRadius(country: Country): number {
-  const baseSize = Math.log10(country.population) * 1.5;
-  const infectionBoost = country.infected > 0 ? Math.min(5, Math.log10(country.infected + 1) * 0.8) : 0;
-  return Math.max(6, baseSize + infectionBoost);
-}
+const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
 export default function WorldMap({ countries, selectedCountry, onSelectCountry, startCountry }: WorldMapProps) {
+  // Build a lookup for quick access
+  const countryLookup = useMemo(() => {
+    const lookup: Record<string, Country> = {};
+    countries.forEach(c => {
+      const iso = countryIdToIso[c.id];
+      if (iso) lookup[iso] = c;
+    });
+    return lookup;
+  }, [countries]);
+
+  const selectedCountryData = selectedCountry ? countries.find(c => c.id === selectedCountry) : null;
+
   return (
     <div className="relative w-full h-full bg-[#0a1628] rounded-lg overflow-hidden border border-green-900/50">
-      {/* Grid lines */}
-      <svg className="absolute inset-0 w-full h-full opacity-10">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <line key={`h${i}`} x1="0" y1={`${(i + 1) * 10}%`} x2="100%" y2={`${(i + 1) * 10}%`} stroke="#00ff00" strokeWidth="0.5" />
-        ))}
-        {Array.from({ length: 10 }).map((_, i) => (
-          <line key={`v${i}`} x1={`${(i + 1) * 10}%`} y1="0" x2={`${(i + 1) * 10}%`} y2="100%" stroke="#00ff00" strokeWidth="0.5" />
-        ))}
-      </svg>
+      <ComposableMap
+        projectionConfig={{
+          rotate: [-10, 0, 0],
+          scale: 147,
+        }}
+        style={{ width: '100%', height: '100%' }}
+      >
+        <ZoomableGroup center={[0, 20]} zoom={1}>
+          <Geographies geography={GEO_URL}>
+            {({ geographies }) =>
+              geographies.map(geo => {
+                const isoCode = String(geo.id || '');
+                const countryId = isoToCountryId[isoCode] || undefined;
+                const country = countryLookup[isoCode];
+                const isSelected = countryId === selectedCountry;
+                const isStart = countryId === startCountry;
+                
+                let fillColor = '#1a3a1a'; // Default untracked country
+                let strokeColor = '#0a2a0a';
+                let strokeWidth = 0.5;
 
-      {/* Connection lines */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
-        {countries.map(country =>
-          country.connections.map(connId => {
-            const target = countries.find(c => c.id === connId);
-            if (!target) return null;
-            if (country.id > connId) return null; // avoid drawing twice
-            const isInfected = country.infected > 0 || target.infected > 0;
-            return (
-              <line
-                key={`${country.id}-${connId}`}
-                x1={`${country.x}%`}
-                y1={`${country.y}%`}
-                x2={`${target.x}%`}
-                y2={`${target.y}%`}
-                stroke={isInfected ? '#ff440044' : '#00ff0022'}
-                strokeWidth="1"
-                strokeDasharray={isInfected ? 'none' : '4,4'}
-              />
-            );
-          })
-        )}
-      </svg>
+                if (country) {
+                  fillColor = getCountryColor(country);
+                  strokeColor = isSelected ? '#ffffff' : isStart ? '#ffd700' : '#000000';
+                  strokeWidth = isSelected ? 1.5 : isStart ? 1 : 0.5;
+                }
 
-      {/* Country nodes */}
-      {countries.map(country => {
-        const radius = getCountryRadius(country);
-        const color = getCountryColor(country);
-        const isSelected = selectedCountry === country.id;
-        const isStart = startCountry === country.id;
-        const infectionPct = country.population > 0 ? (country.infected / country.population * 100) : 0;
-
-        return (
-          <div
-            key={country.id}
-            className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-            style={{ left: `${country.x}%`, top: `${country.y}%` }}
-            onClick={() => onSelectCountry(country.id)}
-          >
-            {/* Pulse animation for infected countries */}
-            {country.infected > 0 && (
-              <div
-                className="absolute rounded-full animate-ping opacity-30"
-                style={{
-                  width: radius * 2.5,
-                  height: radius * 2.5,
-                  left: -(radius * 1.25) + radius,
-                  top: -(radius * 1.25) + radius,
-                  backgroundColor: color,
-                }}
-              />
-            )}
-            
-            {/* Country circle */}
-            <div
-              className={`rounded-full flex items-center justify-center transition-all duration-300 ${
-                isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-transparent' : ''
-              } ${isStart ? 'ring-2 ring-yellow-400' : ''}`}
-              style={{
-                width: radius * 2,
-                height: radius * 2,
-                backgroundColor: color,
-                boxShadow: isSelected ? `0 0 15px ${color}` : `0 0 5px ${color}44`,
-              }}
-            >
-              {country.closed && (
-                <span className="text-white text-[8px] font-bold">🔒</span>
-              )}
-            </div>
-
-            {/* Country name tooltip */}
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-              <div className="bg-black/90 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap border border-green-500/30">
-                <div className="font-bold">{country.name}</div>
-                <div>Pop: {(country.population / 1000000).toFixed(1)}M</div>
-                {country.infected > 0 && <div className="text-red-400">Infected: {infectionPct.toFixed(2)}%</div>}
-                {country.closed && <div className="text-gray-400">CLOSED</div>}
-              </div>
-            </div>
-          </div>
-        );
-      })}
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={fillColor}
+                    stroke={strokeColor}
+                    strokeWidth={strokeWidth}
+                    onClick={() => {
+                      if (countryId) onSelectCountry(countryId);
+                    }}
+                    style={{
+                      outline: 'none',
+                      transition: 'fill 0.3s',
+                    } as React.CSSProperties}
+                  />
+                );
+              })
+            }
+          </Geographies>
+        </ZoomableGroup>
+      </ComposableMap>
 
       {/* Legend */}
-      <div className="absolute bottom-2 left-2 bg-black/70 rounded p-2 text-[10px] text-green-300 border border-green-900/50">
+      <div className="absolute bottom-2 left-2 bg-black/80 rounded p-2 text-[10px] text-green-300 border border-green-900/50">
         <div className="font-bold mb-1">Infection Level</div>
+        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#1a3a1a]"></span> Untracked</div>
         <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#2d5a27]"></span> Clean</div>
         <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#ffdd00]"></span> Low</div>
         <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#ff6600]"></span> Medium</div>
         <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#cc3300]"></span> High</div>
         <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#8b0000]"></span> Critical</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#666]"></span> Closed</div>
+        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#4a4a4a]"></span> Closed</div>
+      </div>
+
+      {/* Selected country tooltip */}
+      {selectedCountryData && (
+        <div className="absolute top-2 right-2 bg-black/90 text-white text-xs p-3 rounded border border-green-500/30 min-w-[160px]">
+          <div className="font-bold text-green-400 mb-1">{selectedCountryData.name}</div>
+          <div className="space-y-0.5 text-[10px]">
+            <div>Population: {(selectedCountryData.population / 1000000).toFixed(1)}M</div>
+            {selectedCountryData.infected > 0 && (
+              <div className="text-red-400">
+                Infected: {((selectedCountryData.infected / selectedCountryData.population) * 100).toFixed(2)}%
+              </div>
+            )}
+            {selectedCountryData.dead > 0 && (
+              <div className="text-gray-400">
+                Dead: {((selectedCountryData.dead / selectedCountryData.population) * 100).toFixed(2)}%
+              </div>
+            )}
+            {selectedCountryData.closed && <div className="text-orange-400">🔒 BORDERS CLOSED</div>}
+            <div className="text-gray-500">Climate: {selectedCountryData.climate}</div>
+            <div className="text-gray-500">Wealth: {selectedCountryData.wealth}</div>
+            <div className="text-gray-500">Connections: {selectedCountryData.connections.length}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Map controls hint */}
+      <div className="absolute top-2 left-2 bg-black/60 rounded px-2 py-1 text-[9px] text-gray-500 border border-green-900/30">
+        Scroll to zoom • Drag to pan
       </div>
     </div>
   );
