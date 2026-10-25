@@ -22,7 +22,7 @@ export default function GameHeader({ gameState, onTogglePause, onSetSpeed, onSho
       <div className="flex items-center gap-2">
         <span className="text-green font-bold">{gameState.diseaseName}</span>
         <span className="text-dim">|</span>
-        <span className="text-dim">Day {gameState.day}</span>
+        <span className="text-white font-bold">Day {gameState.day}</span>
       </div>
 
       {/* DNA */}

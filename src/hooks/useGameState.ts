@@ -17,6 +17,7 @@ export interface GameState {
   coldResistance: number;
   drugResistance: number;
   visibility: number;
+  stealth: number;
   day: number;
   gameSpeed: number;
   isRunning: boolean;
@@ -33,8 +34,8 @@ export interface NewsItem {
   type: 'info' | 'warning' | 'danger' | 'success';
 }
 
-const INITIAL_DNA = 5;
-const DNA_PER_INFECTED = 0.000001;
+const INITIAL_DNA = 10;
+const DNA_PER_INFECTED = 0.05;
 
 export function useGameState() {
   const [gameState, setGameState] = useState<GameState>({
@@ -52,6 +53,7 @@ export function useGameState() {
     coldResistance: 0,
     drugResistance: 0,
     visibility: 0,
+    stealth: 0,
     day: 1,
     gameSpeed: 1,
     isRunning: false,
@@ -114,7 +116,8 @@ export function useGameState() {
         heatResistance: Math.min(1, prev.heatResistance + (evo.effect.heatResistance || 0)),
         coldResistance: Math.min(1, prev.coldResistance + (evo.effect.coldResistance || 0)),
         drugResistance: Math.min(1, prev.drugResistance + (evo.effect.drugResistance || 0)),
-        visibility: Math.min(1, prev.visibility + (evo.effect.visibility || 0)),
+        visibility: Math.min(1, Math.max(0, prev.visibility + (evo.effect.visibility || 0) - (evo.effect.stealth || 0))),
+        stealth: Math.min(1, prev.stealth + (evo.effect.stealth || 0)),
         news: newNews.slice(0, 50),
       };
     });
@@ -177,11 +180,12 @@ export function useGameState() {
         }
       });
 
-      // Countries may close borders based on visibility
+      // Countries may close borders based on visibility (reduced by stealth)
+      const effectiveVisibility = Math.max(0, prev.visibility - prev.stealth * 0.8);
       newCountries.forEach(country => {
         if (country.closed) return;
         const wealthMod = country.wealth === 'wealthy' ? 0.3 : country.wealth === 'developing' ? 0.15 : 0.05;
-        const closeChance = prev.visibility * wealthMod * 0.02 * prev.gameSpeed;
+        const closeChance = effectiveVisibility * wealthMod * 0.02 * prev.gameSpeed;
         if (country.infected > country.population * 0.05 && Math.random() < closeChance) {
           country.closed = true;
           newNews.push({
@@ -192,9 +196,10 @@ export function useGameState() {
         }
       });
 
-      // Cure progress
+      // Cure progress (delayed by stealth)
       let cureStarted = prev.cureStarted;
-      if (!cureStarted && prev.visibility > 0.2 && prev.day > 30) {
+      const cureThreshold = Math.max(0.1, 0.2 - prev.stealth * 0.15);
+      if (!cureStarted && effectiveVisibility > cureThreshold && prev.day > 30) {
         cureStarted = true;
         newNews.push({
           day: prev.day,

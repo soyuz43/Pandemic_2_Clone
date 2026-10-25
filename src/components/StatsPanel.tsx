@@ -133,6 +133,10 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
               <span className="data-label">Drug Resist</span>
               <span className="data-value text-purple-400">{(gameState.drugResistance * 100).toFixed(0)}%</span>
             </div>
+            <div className="data-row">
+              <span className="data-label">Stealth</span>
+              <span className="data-value text-cyan-400">{(gameState.stealth * 100).toFixed(0)}%</span>
+            </div>
           </div>
         </div>
 
