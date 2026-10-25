@@ -21,6 +21,7 @@ export default function GameHeader({ gameState, onTogglePause, onSetSpeed, onSho
       {/* Disease info */}
       <div className="flex items-center gap-2">
         <span className="text-green font-bold">{gameState.diseaseName}</span>
+        <span className="text-dim text-[10px]">({gameState.diseaseType})</span>
         <span className="text-dim">|</span>
         <span className="text-white font-bold">Day {gameState.day}</span>
       </div>

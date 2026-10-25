@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Country, initialCountries } from '../data/countries';
 import { evolutions, Evolution } from '../data/evolutions';
+import { DiseaseType, getDiseaseType } from '../data/diseaseTypes';
 
 export interface GameState {
   countries: Country[];
@@ -10,6 +11,7 @@ export interface GameState {
   totalPopulation: number;
   unlockedEvolutions: string[];
   diseaseName: string;
+  diseaseType: DiseaseType;
   infectivity: number;
   severity: number;
   lethality: number;
@@ -46,6 +48,7 @@ export function useGameState() {
     totalPopulation: 0,
     unlockedEvolutions: [],
     diseaseName: 'Disease',
+    diseaseType: 'bacteria',
     infectivity: 0.1,
     severity: 0,
     lethality: 0,
@@ -66,7 +69,9 @@ export function useGameState() {
 
   const intervalRef = useRef<number | null>(null);
 
-  const startGame = useCallback((diseaseName: string, startCountryId: string) => {
+  const startGame = useCallback((diseaseName: string, startCountryId: string, diseaseType: DiseaseType) => {
+    const diseaseConfig = getDiseaseType(diseaseType);
+    
     const countries: Country[] = initialCountries.map(c => ({
       ...c,
       infected: c.id === startCountryId ? 10 : 0,
@@ -81,13 +86,16 @@ export function useGameState() {
       ...prev,
       countries,
       diseaseName,
+      diseaseType,
       totalPopulation: totalPop,
       totalInfected: 10,
       startCountry: startCountryId,
       isRunning: true,
       day: 1,
       dnaPoints: INITIAL_DNA,
-      news: [{ day: 1, text: `${diseaseName} has been identified in ${countries.find(c => c.id === startCountryId)?.name}.`, type: 'info' }],
+      infectivity: diseaseConfig.startingInfectivity,
+      visibility: Math.max(0, diseaseConfig.startingVisibility),
+      news: [{ day: 1, text: `${diseaseName} (${diseaseConfig.name}) has been identified in ${countries.find(c => c.id === startCountryId)?.name}.`, type: 'info' }],
     }));
   }, []);
 
@@ -96,7 +104,11 @@ export function useGameState() {
       const evo = evolutions.find(e => e.id === evolutionId);
       if (!evo) return prev;
       if (prev.unlockedEvolutions.includes(evolutionId)) return prev;
-      if (prev.dnaPoints < evo.cost) return prev;
+      
+      const diseaseConfig = getDiseaseType(prev.diseaseType);
+      const adjustedCost = Math.ceil(evo.cost * diseaseConfig.evolutionMultiplier);
+      
+      if (prev.dnaPoints < adjustedCost) return prev;
       if (evo.requires && !evo.requires.every(r => prev.unlockedEvolutions.includes(r))) return prev;
 
       const newNews: NewsItem[] = [...prev.news];
@@ -106,9 +118,12 @@ export function useGameState() {
         type: 'warning',
       });
 
+      // Apply stealth bonus from disease type to visibility gain
+      const visibilityGain = (evo.effect.visibility || 0) * (1 - diseaseConfig.stealthBonus);
+
       return {
         ...prev,
-        dnaPoints: prev.dnaPoints - evo.cost,
+        dnaPoints: prev.dnaPoints - adjustedCost,
         unlockedEvolutions: [...prev.unlockedEvolutions, evolutionId],
         infectivity: Math.min(1, prev.infectivity + (evo.effect.infectivity || 0)),
         severity: Math.min(1, prev.severity + (evo.effect.severity || 0)),
@@ -116,7 +131,7 @@ export function useGameState() {
         heatResistance: Math.min(1, prev.heatResistance + (evo.effect.heatResistance || 0)),
         coldResistance: Math.min(1, prev.coldResistance + (evo.effect.coldResistance || 0)),
         drugResistance: Math.min(1, prev.drugResistance + (evo.effect.drugResistance || 0)),
-        visibility: Math.min(1, Math.max(0, prev.visibility + (evo.effect.visibility || 0) - (evo.effect.stealth || 0))),
+        visibility: Math.min(1, Math.max(0, prev.visibility + visibilityGain - (evo.effect.stealth || 0))),
         stealth: Math.min(1, prev.stealth + (evo.effect.stealth || 0)),
         news: newNews.slice(0, 50),
       };
@@ -132,14 +147,17 @@ export function useGameState() {
       const newNews: NewsItem[] = [];
 
       // Spread disease
+      const diseaseConfig = getDiseaseType(prev.diseaseType);
+      
       newCountries.forEach(country => {
         if (country.infected <= 0) return;
 
         const infectionRate = prev.infectivity * (1 + prev.severity * 0.5);
         let climateMod = 1;
-        if (country.climate === 'hot') climateMod = 0.7 + prev.heatResistance * 0.6;
-        if (country.climate === 'cold') climateMod = 0.7 + prev.coldResistance * 0.6;
-        if (country.climate === 'tropical') climateMod = 0.8 + prev.heatResistance * 0.4;
+        if (country.climate === 'hot') climateMod = 0.7 + prev.heatResistance * 0.6 + diseaseConfig.climateResistanceBonus;
+        if (country.climate === 'cold') climateMod = 0.7 + prev.coldResistance * 0.6 + diseaseConfig.climateResistanceBonus;
+        if (country.climate === 'tropical') climateMod = 0.8 + prev.heatResistance * 0.4 + diseaseConfig.climateResistanceBonus;
+        climateMod = Math.max(0.1, climateMod); // Don't let it go negative
 
         const healthyPop = country.population - country.infected - country.dead;
         if (healthyPop <= 0) return;
@@ -160,10 +178,10 @@ export function useGameState() {
           country.infected -= newDeaths;
         }
 
-        // DNA from infections - more generous
-        newDna += newInfections * DNA_PER_INFECTED * prev.gameSpeed;
+        // DNA from infections - more generous, with disease type multiplier
+        newDna += newInfections * DNA_PER_INFECTED * diseaseConfig.dnaMultiplier * prev.gameSpeed;
         // Bonus DNA for deaths (represents more severe disease = more research attention)
-        newDna += newDeaths * DNA_PER_INFECTED * 2 * prev.gameSpeed;
+        newDna += newDeaths * DNA_PER_INFECTED * 2 * diseaseConfig.dnaMultiplier * prev.gameSpeed;
 
         // Spread to connected countries
         if (!country.closed && Math.random() < 0.5 * prev.gameSpeed) {
@@ -251,6 +269,33 @@ export function useGameState() {
 
       // Check win condition - need to kill 95%+ of population
       const allDead = totalDead >= totalPop * 0.95;
+
+      // Virus mutation mechanic - random symptom gain
+      if (diseaseConfig.mutationChance > 0 && Math.random() < diseaseConfig.mutationChance * prev.gameSpeed) {
+        const availableMutations = evolutions.filter(e => 
+          !prev.unlockedEvolutions.includes(e.id) && 
+          e.category === 'symptom' &&
+          (!e.requires || e.requires.every(r => prev.unlockedEvolutions.includes(r)))
+        );
+        if (availableMutations.length > 0) {
+          const mutation = availableMutations[Math.floor(Math.random() * availableMutations.length)];
+          newNews.push({
+            day: prev.day,
+            text: `${prev.diseaseName} has spontaneously mutated: ${mutation.name}!`,
+            type: 'danger',
+          });
+          // Apply mutation effects (free evolution)
+          const newUnlocked = [...prev.unlockedEvolutions, mutation.id];
+          prev = {
+            ...prev,
+            unlockedEvolutions: newUnlocked,
+            infectivity: Math.min(1, prev.infectivity + (mutation.effect.infectivity || 0)),
+            severity: Math.min(1, prev.severity + (mutation.effect.severity || 0)),
+            lethality: Math.min(1, prev.lethality + (mutation.effect.lethality || 0)),
+            visibility: Math.min(1, Math.max(0, prev.visibility + (mutation.effect.visibility || 0) * (1 - diseaseConfig.stealthBonus))),
+          };
+        }
+      }
 
       // Random news events
       if (prev.day % 10 === 0 && prev.visibility > 0.1) {

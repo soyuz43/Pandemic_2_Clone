@@ -1,5 +1,6 @@
 import { GameState } from '../hooks/useGameState';
 import { Country } from '../data/countries';
+import { getDiseaseType } from '../data/diseaseTypes';
 
 interface StatsPanelProps {
   gameState: GameState;
@@ -23,6 +24,7 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 }
 
 export default function StatsPanel({ gameState, selectedCountry }: StatsPanelProps) {
+  const diseaseConfig = getDiseaseType(gameState.diseaseType);
   const infectedPct = gameState.totalPopulation > 0
     ? (gameState.totalInfected / gameState.totalPopulation * 100)
     : 0;
@@ -96,6 +98,45 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
           <div className="data-row">
             <span className="data-label">Borders Closed</span>
             <span className="data-value text-red">{closedCountries}/{gameState.countries.length}</span>
+          </div>
+        </div>
+
+        {/* Disease type traits */}
+        <div className="pt-2 border-t border-subtle">
+          <div className="text-[10px] text-dim uppercase tracking-wider font-bold mb-2">
+            {diseaseConfig.icon} {diseaseConfig.name} Traits
+          </div>
+          <div className="space-y-1 text-[10px]">
+            <div className="data-row">
+              <span className="data-label">DNA Gain</span>
+              <span className={`data-value ${diseaseConfig.dnaMultiplier > 1 ? 'text-green' : diseaseConfig.dnaMultiplier < 1 ? 'text-red' : ''}`}>
+                {diseaseConfig.dnaMultiplier > 1 ? '+' : ''}{((diseaseConfig.dnaMultiplier - 1) * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Evo Cost</span>
+              <span className={`data-value ${diseaseConfig.evolutionMultiplier < 1 ? 'text-green' : diseaseConfig.evolutionMultiplier > 1 ? 'text-red' : ''}`}>
+                {diseaseConfig.evolutionMultiplier < 1 ? '' : '+'}{((1 - diseaseConfig.evolutionMultiplier) * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Climate Resist</span>
+              <span className={`data-value ${diseaseConfig.climateResistanceBonus > 0 ? 'text-green' : diseaseConfig.climateResistanceBonus < 0 ? 'text-red' : ''}`}>
+                {diseaseConfig.climateResistanceBonus > 0 ? '+' : ''}{(diseaseConfig.climateResistanceBonus * 100).toFixed(0)}%
+              </span>
+            </div>
+            {diseaseConfig.mutationChance > 0.01 && (
+              <div className="data-row">
+                <span className="data-label">Mutation</span>
+                <span className="data-value text-yellow">{(diseaseConfig.mutationChance * 100).toFixed(1)}%/day</span>
+              </div>
+            )}
+            {diseaseConfig.stealthBonus > 0 && (
+              <div className="data-row">
+                <span className="data-label">Stealth</span>
+                <span className="data-value text-cyan-400">-{(diseaseConfig.stealthBonus * 100).toFixed(0)}% vis gain</span>
+              </div>
+            )}
           </div>
         </div>
 

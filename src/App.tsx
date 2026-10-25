@@ -19,8 +19,8 @@ export default function App() {
     ? gameState.countries.find(c => c.id === selectedCountryId) || null
     : null;
 
-  const handleStart = (name: string, countryId: string) => {
-    startGame(name, countryId);
+  const handleStart = (name: string, countryId: string, diseaseType: any) => {
+    startGame(name, countryId, diseaseType);
     setShowStartScreen(false);
     setShowHelp(true);
   };
