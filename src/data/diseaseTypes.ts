@@ -16,6 +16,9 @@ export interface DiseaseTypeConfig {
   // Special traits
   mutationChance: number; // Chance of random symptom evolution per day
   stealthBonus: number; // Reduces visibility gain from symptoms
+  // Travel transmission: how efficiently the pathogen rides planes vs. ships
+  airTransmission: number; // multiplier on flight-based seeding (1 = normal)
+  seaTransmission: number; // multiplier on shipping-based seeding (1 = normal)
 }
 
 export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
@@ -31,6 +34,8 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     climateResistanceBonus: -0.2,
     mutationChance: 0.02, // 2% chance per day of random mutation
     stealthBonus: 0,
+    airTransmission: 1.5, // coughed into cabin air — loves planes
+    seaTransmission: 0.7,
   },
   bacteria: {
     id: 'bacteria',
@@ -44,6 +49,8 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     climateResistanceBonus: 0,
     mutationChance: 0.005,
     stealthBonus: 0.05,
+    airTransmission: 1.0,
+    seaTransmission: 1.2, // rides in cargo holds & contaminated water supplies
   },
   parasite: {
     id: 'parasite',
@@ -57,6 +64,8 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     climateResistanceBonus: 0.25,
     mutationChance: 0.001,
     stealthBonus: 0.2, // 20% reduced visibility gain from symptoms
+    airTransmission: 0.6, // adult parasites can't fly
+    seaTransmission: 1.5, // stowaways in ballast water and cargo
   },
 };
 

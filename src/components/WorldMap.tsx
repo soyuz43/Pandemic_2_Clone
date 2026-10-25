@@ -4,8 +4,11 @@ import {
   Geographies,
   Geography,
   ZoomableGroup,
+  Marker,
+  Line,
 } from 'react-simple-maps';
 import { Country } from '../data/countries';
+import { allRoutes } from '../data/routes';
 
 interface WorldMapProps {
   countries: Country[];
@@ -13,6 +16,10 @@ interface WorldMapProps {
   onSelectCountry: (id: string) => void;
   startCountry: string | null;
   onCloseBorders?: (id: string) => void;
+  onCloseAirports?: (id: string) => void;
+  onCloseSeaports?: (id: string) => void;
+  closedAirports?: string[];
+  closedSeaports?: string[];
   dnaPoints?: number;
 }
 
@@ -68,7 +75,23 @@ function getCountryColor(country: Country): string {
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-export default function WorldMap({ countries, selectedCountry, onSelectCountry, startCountry, onCloseBorders, dnaPoints = 0 }: WorldMapProps) {
+// Fictional country node coordinates (same space as countries.ts) for travel lines.
+const NODE_POS: Record<string, [number, number]> = {
+  usa: [-100, 40], canada: [-98, 58], mexico: [-102, 24], brazil: [-55, -10],
+  argentina: [-65, -35], colombia: [-74, 3], uk: [-2, 53], france: [2, 47],
+  germany: [10, 51], spain: [-4, 40], italy: [12.5, 42], russia: [60, 55],
+  china: [105, 35], india: [78, 22], japan: [138, 37], korea: [127, 36],
+  saudi: [45, 24], egypt: [30, 27], nigeria: [8, 10], south_africa: [25, -29],
+  indonesia: [115, -3], australia: [134, -25],
+};
+
+type TravelFilter = 'all' | 'air' | 'sea';
+
+export default function WorldMap({
+  countries, selectedCountry, onSelectCountry, startCountry,
+  onCloseBorders, onCloseAirports, onCloseSeaports,
+  closedAirports = [], closedSeaports = [], dnaPoints = 0,
+}: WorldMapProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -76,6 +99,8 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
     countryId: null,
   });
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+  const [showTravel, setShowTravel] = useState(true);
+  const [travelFilter, setTravelFilter] = useState<TravelFilter>('all');
 
   const countryLookup = useMemo(() => {
     const lookup: Record<string, Country> = {};
@@ -85,6 +110,15 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
     });
     return lookup;
   }, [countries]);
+
+  const infectedIds = useMemo(() => new Set(countries.filter(c => c.infected > 0).map(c => c.id)), [countries]);
+  const closedAirportSet = useMemo(() => new Set(closedAirports), [closedAirports]);
+  const closedSeaportSet = useMemo(() => new Set(closedSeaports), [closedSeaports]);
+
+  // Routes to draw on the overlay (only those touching an infected country get highlighted)
+  const visibleRoutes = useMemo(() => {
+    return allRoutes.filter(r => travelFilter === 'all' || r.kind === travelFilter);
+  }, [travelFilter]);
 
   const hoveredCountryData = hoveredCountry ? countries.find(c => c.id === hoveredCountry) : null;
   const selectedCountryData = selectedCountry ? countries.find(c => c.id === selectedCountry) : null;
@@ -165,8 +199,71 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
               })
             }
           </Geographies>
+
+          {/* ---- Flight & ship traffic overlay ---- */}
+          {showTravel && visibleRoutes.map(route => {
+            const from = NODE_POS[route.from];
+            const to = NODE_POS[route.to];
+            if (!from || !to) return null;
+
+            const isAir = route.kind === 'air';
+            const shut =
+              isAir
+                ? closedAirportSet.has(route.from) || closedAirportSet.has(route.to)
+                : closedSeaportSet.has(route.from) || closedSeaportSet.has(route.to);
+            const touchingInfection = infectedIds.has(route.from) || infectedIds.has(route.to);
+            const active = !shut && touchingInfection;
+
+            return (
+              <Line
+                key={route.id}
+                from={from}
+                to={to}
+                stroke={shut ? '#4a4a4a' : active ? (isAir ? '#ff5555' : '#ff9944') : isAir ? '#3d6b8f' : '#2f5a4f'}
+                strokeWidth={active ? Math.min(2.5, 0.6 + route.traffic / 250) : 0.5}
+                strokeDasharray={shut ? '2 3' : active ? '6 3' : undefined}
+                opacity={shut ? 0.35 : active ? 0.9 : 0.4}
+                style={{ pointerEvents: 'none' } as React.CSSProperties}
+              />
+            );
+          })}
+
+          {/* Airport / seaport status markers */}
+          {showTravel && countries.map(c => {
+            const pos = NODE_POS[c.id];
+            if (!pos) return null;
+            const airportShut = closedAirportSet.has(c.id) || c.closed;
+            const portShut = closedSeaportSet.has(c.id) || c.closed;
+            return (
+              <Marker key={`mk-${c.id}`} coordinates={[pos[0], pos[1] - 2.5]} style={{ pointerEvents: 'none' }}>
+                <text textAnchor="middle" fontSize={airportShut ? 7 : 6} opacity={airportShut ? 0.5 : 0.95}>
+                  {airportShut ? '🛬' : '✈️'}{portShut ? '' : ' ⚓'}
+                </text>
+              </Marker>
+            );
+          })}
         </ZoomableGroup>
       </ComposableMap>
+
+      {/* Travel overlay controls */}
+      <div className="absolute top-2 right-2 flex gap-1 z-10">
+        <button
+          className={`btn text-[9px] px-2 py-0.5 ${showTravel ? 'btn-primary' : ''}`}
+          onClick={() => setShowTravel(v => !v)}
+          title="Toggle flight & shipping routes"
+        >
+          ✈️⚓ Traffic {showTravel ? 'ON' : 'OFF'}
+        </button>
+        {showTravel && (['all', 'air', 'sea'] as TravelFilter[]).map(f => (
+          <button
+            key={f}
+            className={`btn text-[9px] px-2 py-0.5 ${travelFilter === f ? 'btn-primary' : ''}`}
+            onClick={() => setTravelFilter(f)}
+          >
+            {f === 'all' ? 'All' : f === 'air' ? '✈️ Air' : '⚓ Sea'}
+          </button>
+        ))}
+      </div>
 
       {/* Hover tooltip */}
       {hoveredCountryData && !contextMenu.visible && (
@@ -239,6 +336,34 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
               >
                 🔒 Close Borders ({country.wealth === 'wealthy' ? 15 : country.wealth === 'developing' ? 10 : 5} DNA)
               </button>
+            )}
+            {!country.closed && !closedAirportSet.has(country.id) && onCloseAirports && (
+              <button
+                className="context-menu-item w-full text-left text-blue hover:bg-blue/10 cursor-pointer"
+                onClick={() => {
+                  onCloseAirports(country.id);
+                  closeContextMenu();
+                }}
+              >
+                ✈️🚫 Shut Airports ({country.wealth === 'wealthy' ? 8 : country.wealth === 'developing' ? 6 : 4} DNA)
+              </button>
+            )}
+            {closedAirportSet.has(country.id) && !country.closed && (
+              <div className="context-menu-item text-dim">✈️ Airports shut</div>
+            )}
+            {!country.closed && !closedSeaportSet.has(country.id) && onCloseSeaports && (
+              <button
+                className="context-menu-item w-full text-left text-blue hover:bg-blue/10 cursor-pointer"
+                onClick={() => {
+                  onCloseSeaports(country.id);
+                  closeContextMenu();
+                }}
+              >
+                ⚓🚫 Quarantine Seaports ({country.wealth === 'wealthy' ? 6 : country.wealth === 'developing' ? 5 : 3} DNA)
+              </button>
+            )}
+            {closedSeaportSet.has(country.id) && !country.closed && (
+              <div className="context-menu-item text-dim">⚓ Seaports quarantined</div>
             )}
             <div className="context-menu-item text-dim">
               Connections: {country.connections.length}

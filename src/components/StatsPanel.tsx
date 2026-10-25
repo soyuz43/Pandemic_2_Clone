@@ -99,6 +99,10 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
             <span className="data-label">Borders Closed</span>
             <span className="data-value text-red">{closedCountries}/{gameState.countries.length}</span>
           </div>
+          <div className="data-row">
+            <span className="data-label">Airports / Seaports Shut</span>
+            <span className="data-value text-red">{gameState.closedAirports.length} ✈️ / {gameState.closedSeaports.length} ⚓</span>
+          </div>
         </div>
 
         {/* Disease type traits */}
@@ -177,6 +181,43 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
             <div className="data-row">
               <span className="data-label">Stealth</span>
               <span className="data-value text-cyan-400">{(gameState.stealth * 100).toFixed(0)}%</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Flight Spread</span>
+              <span className={`data-value ${gameState.airTransmission >= 1 ? 'text-green' : 'text-dim'}`}>
+                {(gameState.airTransmission * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Shipping Spread</span>
+              <span className={`data-value ${gameState.seaTransmission >= 1 ? 'text-green' : 'text-dim'}`}>
+                {(gameState.seaTransmission * 100).toFixed(0)}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Travel network */}
+        <div className="pt-2 border-t border-subtle">
+          <div className="text-[10px] text-dim uppercase tracking-wider font-bold mb-2">
+            ✈️⚓ Travel Network
+          </div>
+          <div className="space-y-1 text-[10px]">
+            <div className="data-row">
+              <span className="data-label">Active Flights/day</span>
+              <span className="data-value text-blue">{formatNumber(gameState.activeFlights)}</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Active Shipments/day</span>
+              <span className="data-value text-blue">{formatNumber(gameState.activeShips)}</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Airports Shut</span>
+              <span className="data-value text-red">{gameState.closedAirports.length}/{gameState.countries.length}</span>
+            </div>
+            <div className="data-row">
+              <span className="data-label">Seaports Sealed</span>
+              <span className="data-value text-red">{gameState.closedSeaports.length}/{gameState.countries.length}</span>
             </div>
           </div>
         </div>
