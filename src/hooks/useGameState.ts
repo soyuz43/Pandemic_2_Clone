@@ -34,8 +34,8 @@ export interface NewsItem {
   type: 'info' | 'warning' | 'danger' | 'success';
 }
 
-const INITIAL_DNA = 10;
-const DNA_PER_INFECTED = 0.05;
+const INITIAL_DNA = 15;
+const DNA_PER_INFECTED = 0.1;
 
 export function useGameState() {
   const [gameState, setGameState] = useState<GameState>({
@@ -144,29 +144,36 @@ export function useGameState() {
         const healthyPop = country.population - country.infected - country.dead;
         if (healthyPop <= 0) return;
 
+        // Fixed: Use a much higher base rate so infection actually spreads
+        const baseSpreadRate = 0.15; // Base 15% daily spread
         const newInfections = Math.min(
           healthyPop,
-          Math.floor(country.infected * infectionRate * climateMod * 0.05 * (prev.gameSpeed))
+          Math.max(1, Math.floor(country.infected * infectionRate * climateMod * baseSpreadRate * prev.gameSpeed))
         );
         country.infected += newInfections;
 
         // Deaths from severity/lethality
-        const deathRate = prev.lethality * 0.01 * prev.gameSpeed;
-        const newDeaths = Math.floor(country.infected * deathRate);
-        country.dead += newDeaths;
-        country.infected -= newDeaths;
+        const deathRate = prev.lethality * 0.02 * prev.gameSpeed;
+        const newDeaths = Math.max(0, Math.floor(country.infected * deathRate));
+        if (newDeaths > 0) {
+          country.dead += newDeaths;
+          country.infected -= newDeaths;
+        }
 
-        // DNA from infections
+        // DNA from infections - more generous
         newDna += newInfections * DNA_PER_INFECTED * prev.gameSpeed;
+        // Bonus DNA for deaths (represents more severe disease = more research attention)
+        newDna += newDeaths * DNA_PER_INFECTED * 2 * prev.gameSpeed;
 
         // Spread to connected countries
-        if (!country.closed && Math.random() < 0.3 * prev.gameSpeed) {
+        if (!country.closed && Math.random() < 0.5 * prev.gameSpeed) {
           const connections = country.connections;
           connections.forEach(connId => {
             const target = newCountries.find(c => c.id === connId);
-            if (target && !target.closed && target.infected === 0 && country.infected > 100) {
-              if (Math.random() < prev.infectivity * 0.1) {
-                target.infected = Math.max(1, Math.floor(country.infected * 0.001));
+            if (target && !target.closed && target.infected === 0 && country.infected > 10) {
+              // Higher chance of spread, and more initial infections
+              if (Math.random() < prev.infectivity * 0.3) {
+                target.infected = Math.max(5, Math.floor(country.infected * 0.01));
                 if (newNews.length < 3) {
                   newNews.push({
                     day: prev.day,
@@ -288,6 +295,35 @@ export function useGameState() {
     setGameState(prev => ({ ...prev, isRunning: !prev.isRunning }));
   }, []);
 
+  // Manual border closure (costs DNA)
+  const closeBorders = useCallback((countryId: string) => {
+    setGameState(prev => {
+      const country = prev.countries.find(c => c.id === countryId);
+      if (!country || country.closed) return prev;
+      
+      const cost = country.wealth === 'wealthy' ? 15 : country.wealth === 'developing' ? 10 : 5;
+      if (prev.dnaPoints < cost) return prev;
+
+      const newCountries = prev.countries.map(c => 
+        c.id === countryId ? { ...c, closed: true } : c
+      );
+
+      const newNews = [...prev.news];
+      newNews.unshift({
+        day: prev.day,
+        text: `You have closed ${country.name}'s borders! (-${cost} DNA)`,
+        type: 'warning',
+      });
+
+      return {
+        ...prev,
+        countries: newCountries,
+        dnaPoints: prev.dnaPoints - cost,
+        news: newNews.slice(0, 50),
+      };
+    });
+  }, []);
+
   // Game loop
   useEffect(() => {
     if (gameState.isRunning && !gameState.gameOver) {
@@ -317,5 +353,6 @@ export function useGameState() {
     setGameSpeed,
     togglePause,
     getAvailableEvolutions,
+    closeBorders,
   };
 }

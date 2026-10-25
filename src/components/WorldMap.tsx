@@ -12,6 +12,8 @@ interface WorldMapProps {
   selectedCountry: string | null;
   onSelectCountry: (id: string) => void;
   startCountry: string | null;
+  onCloseBorders?: (id: string) => void;
+  dnaPoints?: number;
 }
 
 interface ContextMenuState {
@@ -66,7 +68,7 @@ function getCountryColor(country: Country): string {
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-export default function WorldMap({ countries, selectedCountry, onSelectCountry, startCountry }: WorldMapProps) {
+export default function WorldMap({ countries, selectedCountry, onSelectCountry, startCountry, onCloseBorders, dnaPoints = 0 }: WorldMapProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -221,10 +223,22 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
             <div className="context-menu-item text-dim">
               Wealth: {country.wealth}
             </div>
-            {country.closed && (
+            {country.closed ? (
               <div className="context-menu-item text-red">
                 [BORDERS CLOSED]
               </div>
+            ) : (
+              <button
+                className="context-menu-item w-full text-left text-yellow hover:bg-yellow/10 cursor-pointer"
+                onClick={() => {
+                  if (onCloseBorders) {
+                    onCloseBorders(country.id);
+                    closeContextMenu();
+                  }
+                }}
+              >
+                🔒 Close Borders ({country.wealth === 'wealthy' ? 15 : country.wealth === 'developing' ? 10 : 5} DNA)
+              </button>
             )}
             <div className="context-menu-item text-dim">
               Connections: {country.connections.length}
