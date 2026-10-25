@@ -21,14 +21,14 @@ export default function HelpOverlay({ onClose }: HelpOverlayProps) {
           <div>
             <div className="text-yellow font-bold mb-1">DNA Points</div>
             <p className="text-dim">
-              Earn DNA as your disease infects people. Spend DNA to evolve symptoms, transmission methods, and abilities.
+              Earn diminishing DNA from new infections and deaths. Close borders for free; airport and seaport shutdowns still cost DNA.
             </p>
           </div>
 
           <div>
             <div className="text-blue font-bold mb-1">Spread</div>
             <p className="text-dim">
-              Your disease spreads automatically to connected countries. Climate and wealth affect infection rates.
+              Your disease spreads locally, across land connections, and over two-way flight and shipping corridors. Recovered people gain immunity; water-capable pathogens contaminate treated, groundwater, and surface-water sources. These are country-level exposure estimates, not detailed geographic water tables. Hover route lines to inspect traffic and status.
             </p>
           </div>
 

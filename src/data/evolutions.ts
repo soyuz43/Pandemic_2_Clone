@@ -15,6 +15,7 @@ export interface Evolution {
     stealth?: number;
     airTransmission?: number; // additive boost to flight seeding power
     seaTransmission?: number; // additive boost to shipping seeding power
+    waterTransmission?: number;
   };
   requires?: string[];
 }
@@ -32,8 +33,8 @@ export const evolutions: Evolution[] = [
   // Transmission — travel network boosters (air/sea seeding power)
   { id: 'air1', name: 'Air Transmission I', description: '+10% infectivity, doubles flight transmission', category: 'transmission', cost: 5, effect: { infectivity: 0.10, airTransmission: 1.0 } },
   { id: 'air2', name: 'Air Transmission II', description: '+20% infectivity, triples flight transmission', category: 'transmission', cost: 15, effect: { infectivity: 0.20, airTransmission: 2.0 }, requires: ['air1'] },
-  { id: 'water1', name: 'Water Transmission I', description: '+10% infectivity, doubles shipping transmission', category: 'transmission', cost: 5, effect: { infectivity: 0.10, seaTransmission: 1.0 } },
-  { id: 'water2', name: 'Water Transmission II', description: '+20% infectivity, triples shipping transmission', category: 'transmission', cost: 15, effect: { infectivity: 0.20, seaTransmission: 2.0 }, requires: ['water1'] },
+  { id: 'water1', name: 'Waterborne I', description: 'Contaminates groundwater and surface water; improves local water spread', category: 'transmission', cost: 5, effect: { waterTransmission: 0.45 } },
+  { id: 'water2', name: 'Waterborne II', description: 'Persists in treated supplies and spreads more efficiently through local water sources', category: 'transmission', cost: 15, effect: { waterTransmission: 0.8 }, requires: ['water1'] },
   { id: 'blood', name: 'Blood Transmission', description: '+15% infectivity, +5% severity', category: 'transmission', cost: 10, effect: { infectivity: 0.15, severity: 0.05 } },
   { id: 'insect', name: 'Insect Transmission', description: '+15% infectivity, boosts both flight and shipping spread', category: 'transmission', cost: 12, effect: { infectivity: 0.15, airTransmission: 0.5, seaTransmission: 0.5 } },
   { id: 'rodent', name: 'Rodent Transmission', description: '+12% infectivity', category: 'transmission', cost: 10, effect: { infectivity: 0.12 } },

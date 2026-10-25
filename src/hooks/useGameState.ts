@@ -3,6 +3,7 @@ import { Country, initialCountries } from '../data/countries';
 import { evolutions, Evolution } from '../data/evolutions';
 import { DiseaseType, getDiseaseType } from '../data/diseaseTypes';
 import { allRoutes, namedRoutes, type TradeRoute } from '../data/routes';
+import { createWaterRegions, type WaterRegionState } from '../data/waterSystems';
 
 // Friendly game-city names for news headlines (fictional: usa node = Chicago, south_africa node = Johannesburg).
 const CITY_NAMES: Record<string, string> = Object.fromEntries(
@@ -20,6 +21,7 @@ export interface GameState {
   countries: Country[];
   dnaPoints: number;
   totalInfected: number;
+  totalRecovered: number;
   totalDead: number;
   totalPopulation: number;
   unlockedEvolutions: string[];
@@ -35,11 +37,14 @@ export interface GameState {
   stealth: number;
   airTransmission: number; // pathogen's flight-spreading power (base + evolutions)
   seaTransmission: number; // pathogen's shipping-spreading power (base + evolutions)
+  waterTransmission: number;
+  waterRegions: WaterRegionState[];
   day: number;
   gameSpeed: number;
   isRunning: boolean;
   gameOver: boolean;
   gameWon: boolean;
+  gameOverReason: 'cure' | 'extinction' | 'collapse' | null;
   news: NewsItem[];
   cureStarted: boolean;
   startCountry: string | null;
@@ -56,12 +61,18 @@ export interface NewsItem {
 }
 
 const INITIAL_DNA = 15;
-const DNA_PER_INFECTED = 0.1;
+const DNA_BANK_CAP = 250;
+const BASE_SPREAD_RATE = 0.15;
+const TARGET_BASE_REPRODUCTION = 1.06;
+const DNA_PER_TICK_CAP = 1.5;
+const DNA_CASE_SCALE = 0.35;
+const DNA_DEATH_SCALE = 0.12;
+const DNA_DAMPING_CASES = 250_000;
+const WATER_SPREAD_RATE = 0.001;
 
 // Travel network tuning (fictional game values)
 const AIR_BASE_POWER = 0.6;   // baseline flight-spreading power of any pathogen
 const SEA_BASE_POWER = 0.4;   // baseline shipping-spreading power
-const TRAFFIC_SCALE = 300;    // normalizer: route traffic / TRAFFIC_SCALE ≈ per-route seeding chance factor
 const OUTBREAK_VISIBILITY_THRESHOLD = 0.35; // visible outbreaks trigger automatic closures
 
 export function useGameState() {
@@ -69,6 +80,7 @@ export function useGameState() {
     countries: [],
     dnaPoints: INITIAL_DNA,
     totalInfected: 0,
+    totalRecovered: 0,
     totalDead: 0,
     totalPopulation: 0,
     unlockedEvolutions: [],
@@ -84,11 +96,14 @@ export function useGameState() {
     stealth: 0,
     airTransmission: AIR_BASE_POWER,
     seaTransmission: SEA_BASE_POWER,
+    waterTransmission: 0,
+    waterRegions: [],
     day: 1,
     gameSpeed: 1,
     isRunning: false,
     gameOver: false,
     gameWon: false,
+    gameOverReason: null,
     news: [],
     cureStarted: false,
     startCountry: null,
@@ -106,6 +121,7 @@ export function useGameState() {
     const countries: Country[] = initialCountries.map(c => ({
       ...c,
       infected: c.id === startCountryId ? 10 : 0,
+      recovered: 0,
       dead: 0,
       closed: false,
       cureProgress: 0,
@@ -120,14 +136,20 @@ export function useGameState() {
       diseaseType,
       totalPopulation: totalPop,
       totalInfected: 10,
+      totalRecovered: 0,
       startCountry: startCountryId,
       isRunning: true,
+      gameOver: false,
+      gameWon: false,
+      gameOverReason: null,
       day: 1,
       dnaPoints: INITIAL_DNA,
       infectivity: diseaseConfig.startingInfectivity,
       visibility: Math.max(0, diseaseConfig.startingVisibility),
       airTransmission: AIR_BASE_POWER * diseaseConfig.airTransmission,
       seaTransmission: SEA_BASE_POWER * diseaseConfig.seaTransmission,
+      waterTransmission: diseaseConfig.waterTransmission,
+      waterRegions: createWaterRegions(countries),
       closedAirports: [],
       closedSeaports: [],
       activeFlights: 0,
@@ -172,6 +194,7 @@ export function useGameState() {
         stealth: Math.min(1, prev.stealth + (evo.effect.stealth || 0)),
         airTransmission: prev.airTransmission + (evo.effect.airTransmission || 0),
         seaTransmission: prev.seaTransmission + (evo.effect.seaTransmission || 0),
+        waterTransmission: Math.min(2, prev.waterTransmission + (evo.effect.waterTransmission || 0)),
         news: newNews.slice(0, 50),
       };
     });
@@ -183,6 +206,8 @@ export function useGameState() {
 
       const newCountries = prev.countries.map(c => ({ ...c }));
       let newDna = prev.dnaPoints;
+      let newInfectionsToday = 0;
+      let newDeathsToday = 0;
       const newNews: NewsItem[] = [];
       const countryById: Record<string, Country> = {};
       newCountries.forEach(c => { countryById[c.id] = c; });
@@ -194,9 +219,9 @@ export function useGameState() {
       let shipsToday = 0;
 
       // ---- FLIGHT & SHIP TRAFFIC LAYER ----
-      // Every open route carries traffic each day. If the origin has a meaningful
-      // outbreak and the destination is still clean, there is a chance an infected
-      // traveler/boarder seeds the disease there. Seeding power depends on:
+      // Every open corridor carries traffic in both directions. If either endpoint
+      // has a meaningful outbreak and the other is still clean, infected travelers
+      // can seed the disease there. Seeding power depends on:
       //   route traffic (volume), pathogen travel transmission (type + evolutions),
       //   infectivity, stealth (undetected travelers slip past screening),
       //   and whether either end has shut its airports/seaports.
@@ -219,31 +244,41 @@ export function useGameState() {
         }
 
         if (transportClosed) return;            // nothing crosses a closed frontier
-        if (dest.infected > 0) return;          // already seeded, no news spam
-        if (origin.infected <= 0) return;
+        const seedAcrossCorridor = (
+          source: Country,
+          target: Country,
+          sourceSide: 'from' | 'to',
+          targetSide: 'from' | 'to',
+        ) => {
+          if (target.infected > 0 || target.dead + target.recovered >= target.population) return;
+          if (source.infected < 10) return;
 
-        const originRatio = origin.infected / origin.population;
-        if (originRatio < 0.0005) return;       // too few cases to board anything
+          const power = isAir ? prev.airTransmission : prev.seaTransmission;
+          const sourceRatio = source.infected / source.population;
+          const screeningFactor = 1 - Math.min(0.75, Math.max(0, prev.visibility - prev.stealth * 0.8));
+          const carrierPressure = route.traffic / 20 * sourceRatio * power * prev.infectivity *
+            (1 + prev.stealth * 0.8) * screeningFactor * prev.gameSpeed;
+          const chance = 1 - Math.exp(-carrierPressure);
 
-        const power = isAir ? prev.airTransmission : prev.seaTransmission;
-        const volumeFactor = Math.min(2, route.traffic / TRAFFIC_SCALE);
-        const stealthAssist = 1 + prev.stealth * 0.8; // undetected carriers pass screening
-        const chance = power * volumeFactor * prev.infectivity * stealthAssist *
-                       Math.min(1, originRatio * 40) * 0.08 * prev.gameSpeed;
+          if (Math.random() >= chance) return;
 
-        if (Math.random() < chance) {
-          const seedCount = Math.max(3, Math.floor(Math.min(origin.infected * 0.005, dest.population * 0.0001)) || 3);
-          dest.infected = Math.max(dest.infected, seedCount);
+          const susceptible = target.population - target.dead - target.recovered;
+          const seedCount = Math.min(susceptible, Math.max(3, Math.floor(Math.min(source.infected * 0.005, target.population * 0.0001)) || 3));
+          target.infected = Math.max(target.infected, seedCount);
+          newInfectionsToday += seedCount;
           if (newNews.length < 5) {
             newNews.push({
               day: prev.day,
               text: isAir
-                ? `${prev.diseaseName} reached ${cityName(route, 'to')} aboard a flight from ${cityName(route, 'from')}!`
-                : `${prev.diseaseName} reached ${cityName(route, 'to')} hidden aboard cargo ships from ${cityName(route, 'from')}!`,
+                ? `${prev.diseaseName} reached ${cityName(route, targetSide)} aboard a flight from ${cityName(route, sourceSide)}!`
+                : `${prev.diseaseName} reached ${cityName(route, targetSide)} hidden aboard cargo ships from ${cityName(route, sourceSide)}!`,
               type: 'danger',
             });
           }
-        }
+        };
+
+        seedAcrossCorridor(origin, dest, 'from', 'to');
+        seedAcrossCorridor(dest, origin, 'to', 'from');
       });
 
       // Spread disease
@@ -257,41 +292,41 @@ export function useGameState() {
         if (country.climate === 'hot') climateMod = 0.7 + prev.heatResistance * 0.6 + diseaseConfig.climateResistanceBonus;
         if (country.climate === 'cold') climateMod = 0.7 + prev.coldResistance * 0.6 + diseaseConfig.climateResistanceBonus;
         if (country.climate === 'tropical') climateMod = 0.8 + prev.heatResistance * 0.4 + diseaseConfig.climateResistanceBonus;
-        climateMod = Math.max(0.1, climateMod); // Don't let it go negative
+        climateMod = Math.max(0.1, climateMod);
+        climateMod = 0.9 + climateMod * 0.1;
 
-        const healthyPop = country.population - country.infected - country.dead;
+        const healthyPop = country.population - country.infected - country.dead - country.recovered;
         if (healthyPop <= 0) return;
 
-        // Fixed: Use a much higher base rate so infection actually spreads
-        const baseSpreadRate = 0.15; // Base 15% daily spread
-        const newInfections = Math.min(
-          healthyPop,
-          Math.max(1, Math.floor(country.infected * infectionRate * climateMod * baseSpreadRate * prev.gameSpeed))
-        );
+        const newInfections = Math.min(healthyPop, country.infected * infectionRate * climateMod * BASE_SPREAD_RATE * prev.gameSpeed);
         country.infected += newInfections;
+        newInfectionsToday += newInfections;
 
-        // Deaths from severity/lethality
         const deathRate = prev.lethality * 0.02 * prev.gameSpeed;
-        const newDeaths = Math.max(0, Math.floor(country.infected * deathRate));
+        const newDeaths = Math.min(country.infected, country.infected * deathRate);
         if (newDeaths > 0) {
           country.dead += newDeaths;
           country.infected -= newDeaths;
+          newDeathsToday += newDeaths;
         }
 
-        // DNA from infections - more generous, with disease type multiplier
-        newDna += newInfections * DNA_PER_INFECTED * diseaseConfig.dnaMultiplier * prev.gameSpeed;
-        // Bonus DNA for deaths (represents more severe disease = more research attention)
-        newDna += newDeaths * DNA_PER_INFECTED * 2 * diseaseConfig.dnaMultiplier * prev.gameSpeed;
+        const recoverySuppression = Math.max(0.01, 1 - prev.lethality * 1.98);
+        const recoveryRate = diseaseConfig.startingInfectivity * BASE_SPREAD_RATE / TARGET_BASE_REPRODUCTION * recoverySuppression * prev.gameSpeed;
+        const recoveries = Math.min(country.infected, country.infected * recoveryRate);
+        country.infected -= recoveries;
+        country.recovered += recoveries;
 
         // Spread to connected countries
         if (!country.closed && Math.random() < 0.5 * prev.gameSpeed) {
           const connections = country.connections;
           connections.forEach(connId => {
             const target = newCountries.find(c => c.id === connId);
-            if (target && !target.closed && target.infected === 0 && country.infected > 10) {
+            if (target && !target.closed && target.infected === 0 && target.dead + target.recovered < target.population && country.infected > 10) {
               // Higher chance of spread, and more initial infections
               if (Math.random() < prev.infectivity * 0.3) {
-                target.infected = Math.max(5, Math.floor(country.infected * 0.01));
+                const seedCount = Math.min(target.population - target.dead - target.recovered, Math.max(5, Math.floor(country.infected * 0.01)));
+                target.infected = seedCount;
+                newInfectionsToday += seedCount;
                 if (newNews.length < 3) {
                   newNews.push({
                     day: prev.day,
@@ -304,6 +339,41 @@ export function useGameState() {
           });
         }
       });
+
+      const newWaterRegions = prev.waterRegions.map(region => {
+        const country = countryById[region.countryId];
+        if (!country) return region;
+
+        const prevalence = country.infected / country.population;
+        const contaminationGrowth = prevalence * prev.waterTransmission * (0.025 + region.vulnerability * 0.05) * prev.gameSpeed;
+        const contaminationDecay = region.contamination * (0.012 + (1 - region.vulnerability) * 0.025) * prev.gameSpeed;
+
+        return {
+          ...region,
+          contamination: Math.max(0, Math.min(1, region.contamination + contaminationGrowth - contaminationDecay)),
+        };
+      });
+
+      newCountries.forEach(country => {
+        const susceptible = country.population - country.infected - country.dead - country.recovered;
+        if (susceptible <= 0 || prev.waterTransmission <= 0) return;
+
+        const regionalExposure = newWaterRegions
+          .filter(region => region.countryId === country.id)
+          .reduce((sum, region) => sum + region.populationShare * region.vulnerability * region.contamination, 0);
+        const waterInfectionRate = Math.min(0.01, regionalExposure * prev.waterTransmission * WATER_SPREAD_RATE * prev.gameSpeed);
+        const waterInfections = Math.min(susceptible, susceptible * waterInfectionRate);
+        country.infected += waterInfections;
+        newInfectionsToday += waterInfections;
+      });
+
+      const caseDna = Math.log1p(newInfectionsToday / 100) * DNA_CASE_SCALE;
+      const deathDna = Math.log1p(newDeathsToday / 100) * DNA_DEATH_SCALE;
+      const dnaDiminishingReturns = 1 / (1 + prev.totalInfected / DNA_DAMPING_CASES);
+      newDna = Math.min(
+        DNA_BANK_CAP,
+        newDna + Math.min(DNA_PER_TICK_CAP, (caseDna + deathDna) * diseaseConfig.dnaMultiplier) * dnaDiminishingReturns,
+      );
 
       // Countries may close borders based on visibility (reduced by stealth).
       // Visible outbreaks ALSO trigger automatic airport & seaport closures —
@@ -380,10 +450,15 @@ export function useGameState() {
           return {
             ...prev,
             countries: newCountries,
-            dnaPoints: Math.floor(newDna),
+            dnaPoints: newDna,
+            waterRegions: newWaterRegions,
+            totalInfected: newCountries.reduce((sum, c) => sum + c.infected, 0),
+            totalRecovered: newCountries.reduce((sum, c) => sum + c.recovered, 0),
+            totalDead: newCountries.reduce((sum, c) => sum + c.dead, 0),
             day: prev.day + 1,
             gameOver: true,
             gameWon: false,
+            gameOverReason: 'cure',
             news: [...newNews, ...prev.news].slice(0, 50),
             cureStarted,
           };
@@ -397,6 +472,16 @@ export function useGameState() {
 
       // Check win condition - need to kill 95%+ of population
       const allDead = totalDead >= totalPop * 0.95;
+      const outbreakBurnedOut = totalInfected < 1;
+      const gameIsOver = allDead || outbreakBurnedOut;
+
+      if (outbreakBurnedOut && !allDead) {
+        newNews.push({
+          day: prev.day,
+          text: `${prev.diseaseName} has burned out after most infected people recovered.`,
+          type: 'success',
+        });
+      }
 
       // Virus mutation mechanic - random symptom gain
       if (diseaseConfig.mutationChance > 0 && Math.random() < diseaseConfig.mutationChance * prev.gameSpeed) {
@@ -447,17 +532,20 @@ export function useGameState() {
       return {
         ...prev,
         countries: newCountries,
-        dnaPoints: Math.floor(newDna),
+        dnaPoints: newDna,
         totalInfected,
+        totalRecovered: newCountries.reduce((sum, c) => sum + c.recovered, 0),
         totalDead,
         day: prev.day + 1,
-        isRunning: !allDead,
-        gameOver: allDead,
+        isRunning: !gameIsOver,
+        gameOver: gameIsOver,
         gameWon: allDead,
+        gameOverReason: allDead ? 'collapse' : outbreakBurnedOut ? 'extinction' : null,
         news: [...newNews, ...prev.news].slice(0, 50),
         cureStarted,
         closedAirports: Array.from(closedAirports),
         closedSeaports: Array.from(closedSeaports),
+        waterRegions: newWaterRegions,
         activeFlights: flightsToday,
         activeShips: shipsToday,
       };
@@ -472,15 +560,11 @@ export function useGameState() {
     setGameState(prev => ({ ...prev, isRunning: !prev.isRunning }));
   }, []);
 
-  // Manual border closure (costs DNA) — shuts land borders AND all travel links.
   const closeBorders = useCallback((countryId: string) => {
     setGameState(prev => {
       const country = prev.countries.find(c => c.id === countryId);
       if (!country || country.closed) return prev;
       
-      const cost = country.wealth === 'wealthy' ? 15 : country.wealth === 'developing' ? 10 : 5;
-      if (prev.dnaPoints < cost) return prev;
-
       const newCountries = prev.countries.map(c => 
         c.id === countryId ? { ...c, closed: true } : c
       );
@@ -488,14 +572,13 @@ export function useGameState() {
       const newNews = [...prev.news];
       newNews.unshift({
         day: prev.day,
-        text: `You have closed ${country.name}'s borders! Flights and shipping suspended. (-${cost} DNA)`,
+        text: `You have closed ${country.name}'s borders! Flights and shipping suspended.`,
         type: 'warning',
       });
 
       return {
         ...prev,
         countries: newCountries,
-        dnaPoints: prev.dnaPoints - cost,
         news: newNews.slice(0, 50),
       };
     });

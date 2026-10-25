@@ -19,6 +19,7 @@ export interface DiseaseTypeConfig {
   // Travel transmission: how efficiently the pathogen rides planes vs. ships
   airTransmission: number; // multiplier on flight-based seeding (1 = normal)
   seaTransmission: number; // multiplier on shipping-based seeding (1 = normal)
+  waterTransmission: number; // ability to persist and spread through local water supplies
 }
 
 export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
@@ -36,6 +37,7 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     stealthBonus: 0,
     airTransmission: 1.5, // coughed into cabin air — loves planes
     seaTransmission: 0.7,
+    waterTransmission: 0.05,
   },
   bacteria: {
     id: 'bacteria',
@@ -51,6 +53,7 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     stealthBonus: 0.05,
     airTransmission: 1.0,
     seaTransmission: 1.2, // rides in cargo holds & contaminated water supplies
+    waterTransmission: 0.12,
   },
   parasite: {
     id: 'parasite',
@@ -66,6 +69,7 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     stealthBonus: 0.2, // 20% reduced visibility gain from symptoms
     airTransmission: 0.6, // adult parasites can't fly
     seaTransmission: 1.5, // stowaways in ballast water and cargo
+    waterTransmission: 0.25,
   },
 };
 

@@ -8,7 +8,7 @@ export interface TradeRoute {
   kind: RouteKind;
   from: string;   // country id
   to: string;     // country id
-  traffic: number; // relative passenger/cargo volume per day (game units)
+  traffic: number; // relative passenger/cargo volume per day across both directions (game units)
 }
 
 // Hub airports and ports used by the auto-generated route network below.

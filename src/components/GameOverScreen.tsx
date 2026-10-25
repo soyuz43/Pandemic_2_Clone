@@ -23,6 +23,17 @@ export default function GameOverScreen({ gameState, onRestart }: GameOverScreenP
               </p>
             </div>
           </>
+        ) : gameState.gameOverReason === 'extinction' ? (
+          <>
+            <div className="panel-header text-center text-green text-sm">
+              Outbreak Burned Out
+            </div>
+            <div className="p-6 text-center">
+              <p className="text-dim text-sm mb-6">
+                Most infected people recovered and the outbreak could no longer spread.
+              </p>
+            </div>
+          </>
         ) : (
           <>
             <div className="panel-header text-center text-blue text-sm">
@@ -45,6 +56,10 @@ export default function GameOverScreen({ gameState, onRestart }: GameOverScreenP
             <div className="stat-block border-yellow/30">
               <div className="stat-value text-yellow">{infectedPct.toFixed(1)}%</div>
               <div className="stat-label text-dim">Infected</div>
+            </div>
+            <div className="stat-block border-green/30">
+              <div className="stat-value text-green">{(gameState.totalRecovered / gameState.totalPopulation * 100).toFixed(1)}%</div>
+              <div className="stat-label text-dim">Recovered</div>
             </div>
             <div className="stat-block">
               <div className="stat-value text-green">{gameState.day}</div>
