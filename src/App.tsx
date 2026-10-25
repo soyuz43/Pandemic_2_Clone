@@ -10,7 +10,7 @@ import GameOverScreen from './components/GameOverScreen';
 import HelpOverlay from './components/HelpOverlay';
 
 export default function App() {
-  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions, closeBorders } = useGameState();
+  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions, closeBorders, closeAirports, closeSeaports } = useGameState();
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [showStartScreen, setShowStartScreen] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -88,6 +88,10 @@ export default function App() {
               onSelectCountry={setSelectedCountryId}
               startCountry={gameState.startCountry}
               onCloseBorders={closeBorders}
+              onCloseAirports={closeAirports}
+              onCloseSeaports={closeSeaports}
+              closedAirports={gameState.closedAirports}
+              closedSeaports={gameState.closedSeaports}
               dnaPoints={gameState.dnaPoints}
             />
           </div>

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Country, initialCountries } from '../data/countries';
 import { evolutions, Evolution } from '../data/evolutions';
 import { DiseaseType, getDiseaseType } from '../data/diseaseTypes';
+import { allRoutes } from '../data/routes';
 
 export interface GameState {
   countries: Country[];
@@ -20,6 +21,8 @@ export interface GameState {
   drugResistance: number;
   visibility: number;
   stealth: number;
+  airTransmission: number; // pathogen's flight-spreading power (base + evolutions)
+  seaTransmission: number; // pathogen's shipping-spreading power (base + evolutions)
   day: number;
   gameSpeed: number;
   isRunning: boolean;
@@ -28,6 +31,10 @@ export interface GameState {
   news: NewsItem[];
   cureStarted: boolean;
   startCountry: string | null;
+  closedAirports: string[];   // country ids whose airports are shut (blocks air seeding)
+  closedSeaports: string[];   // country ids whose seaports are shut (blocks sea seeding)
+  activeFlights: number;      // live stats for the travel overlay / HUD
+  activeShips: number;
 }
 
 export interface NewsItem {
@@ -38,6 +45,12 @@ export interface NewsItem {
 
 const INITIAL_DNA = 15;
 const DNA_PER_INFECTED = 0.1;
+
+// Travel network tuning (fictional game values)
+const AIR_BASE_POWER = 0.6;   // baseline flight-spreading power of any pathogen
+const SEA_BASE_POWER = 0.4;   // baseline shipping-spreading power
+const TRAFFIC_SCALE = 300;    // normalizer: route traffic / TRAFFIC_SCALE ≈ per-route seeding chance factor
+const OUTBREAK_VISIBILITY_THRESHOLD = 0.35; // visible outbreaks trigger automatic closures
 
 export function useGameState() {
   const [gameState, setGameState] = useState<GameState>({
@@ -57,6 +70,8 @@ export function useGameState() {
     drugResistance: 0,
     visibility: 0,
     stealth: 0,
+    airTransmission: AIR_BASE_POWER,
+    seaTransmission: SEA_BASE_POWER,
     day: 1,
     gameSpeed: 1,
     isRunning: false,
@@ -65,6 +80,10 @@ export function useGameState() {
     news: [],
     cureStarted: false,
     startCountry: null,
+    closedAirports: [],
+    closedSeaports: [],
+    activeFlights: 0,
+    activeShips: 0,
   });
 
   const intervalRef = useRef<number | null>(null);
@@ -95,6 +114,12 @@ export function useGameState() {
       dnaPoints: INITIAL_DNA,
       infectivity: diseaseConfig.startingInfectivity,
       visibility: Math.max(0, diseaseConfig.startingVisibility),
+      airTransmission: AIR_BASE_POWER * diseaseConfig.airTransmission,
+      seaTransmission: SEA_BASE_POWER * diseaseConfig.seaTransmission,
+      closedAirports: [],
+      closedSeaports: [],
+      activeFlights: 0,
+      activeShips: 0,
       news: [{ day: 1, text: `${diseaseName} (${diseaseConfig.name}) has been identified in ${countries.find(c => c.id === startCountryId)?.name}.`, type: 'info' }],
     }));
   }, []);
@@ -133,6 +158,8 @@ export function useGameState() {
         drugResistance: Math.min(1, prev.drugResistance + (evo.effect.drugResistance || 0)),
         visibility: Math.min(1, Math.max(0, prev.visibility + visibilityGain - (evo.effect.stealth || 0))),
         stealth: Math.min(1, prev.stealth + (evo.effect.stealth || 0)),
+        airTransmission: prev.airTransmission + (evo.effect.airTransmission || 0),
+        seaTransmission: prev.seaTransmission + (evo.effect.seaTransmission || 0),
         news: newNews.slice(0, 50),
       };
     });
@@ -145,6 +172,67 @@ export function useGameState() {
       const newCountries = prev.countries.map(c => ({ ...c }));
       let newDna = prev.dnaPoints;
       const newNews: NewsItem[] = [];
+      const countryById: Record<string, Country> = {};
+      newCountries.forEach(c => { countryById[c.id] = c; });
+
+      // Travel network state for this day (airports/seaports closed by panic)
+      const closedAirports = new Set(prev.closedAirports);
+      const closedSeaports = new Set(prev.closedSeaports);
+      let flightsToday = 0;
+      let shipsToday = 0;
+
+      // ---- FLIGHT & SHIP TRAFFIC LAYER ----
+      // Every open route carries traffic each day. If the origin has a meaningful
+      // outbreak and the destination is still clean, there is a chance an infected
+      // traveler/boarder seeds the disease there. Seeding power depends on:
+      //   route traffic (volume), pathogen travel transmission (type + evolutions),
+      //   infectivity, stealth (undetected travelers slip past screening),
+      //   and whether either end has shut its airports/seaports.
+      allRoutes.forEach(route => {
+        const origin = countryById[route.from];
+        const dest = countryById[route.to];
+        if (!origin || !dest) return;
+
+        const isAir = route.kind === 'air';
+        const transportClosed =
+          origin.closed || dest.closed ||
+          (isAir ? (closedAirports.has(origin.id) || closedAirports.has(dest.id))
+                 : (closedSeaports.has(origin.id) || closedSeaports.has(dest.id)));
+
+        // Traffic still flies/sails between open countries — it just can't seed
+        // across a shut frontier. Count live traffic for the HUD/overlay.
+        if (!transportClosed) {
+          if (isAir) flightsToday += route.traffic;
+          else shipsToday += route.traffic;
+        }
+
+        if (transportClosed) return;            // nothing crosses a closed frontier
+        if (dest.infected > 0) return;          // already seeded, no news spam
+        if (origin.infected <= 0) return;
+
+        const originRatio = origin.infected / origin.population;
+        if (originRatio < 0.0005) return;       // too few cases to board anything
+
+        const power = isAir ? prev.airTransmission : prev.seaTransmission;
+        const volumeFactor = Math.min(2, route.traffic / TRAFFIC_SCALE);
+        const stealthAssist = 1 + prev.stealth * 0.8; // undetected carriers pass screening
+        const chance = power * volumeFactor * prev.infectivity * stealthAssist *
+                       Math.min(1, originRatio * 40) * 0.08 * prev.gameSpeed;
+
+        if (Math.random() < chance) {
+          const seedCount = Math.max(3, Math.floor(Math.min(origin.infected * 0.005, dest.population * 0.0001)) || 3);
+          dest.infected = Math.max(dest.infected, seedCount);
+          if (newNews.length < 5) {
+            newNews.push({
+              day: prev.day,
+              text: isAir
+                ? `${prev.diseaseName} reached ${dest.name} aboard a flight from ${origin.name}!`
+                : `${prev.diseaseName} reached ${dest.name} hidden aboard cargo ships from ${origin.name}!`,
+              type: 'danger',
+            });
+          }
+        }
+      });
 
       // Spread disease
       const diseaseConfig = getDiseaseType(prev.diseaseType);
@@ -205,11 +293,39 @@ export function useGameState() {
         }
       });
 
-      // Countries may close borders based on visibility (reduced by stealth)
+      // Countries may close borders based on visibility (reduced by stealth).
+      // Visible outbreaks ALSO trigger automatic airport & seaport closures —
+      // the classic "panic response" that strangles the travel network.
       const effectiveVisibility = Math.max(0, prev.visibility - prev.stealth * 0.8);
       newCountries.forEach(country => {
-        if (country.closed) return;
         const wealthMod = country.wealth === 'wealthy' ? 0.3 : country.wealth === 'developing' ? 0.15 : 0.05;
+        const outbreakRatio = country.infected / country.population;
+
+        // Automatic airport closure: high local outbreak + disease is visible.
+        if (!closedAirports.has(country.id) && outbreakRatio > 0.02 &&
+            effectiveVisibility > OUTBREAK_VISIBILITY_THRESHOLD &&
+            Math.random() < wealthMod * 0.3 * prev.gameSpeed) {
+          closedAirports.add(country.id);
+          newNews.push({
+            day: prev.day,
+            text: `${country.name} has shut its airports after visible outbreaks! ✈️🚫`,
+            type: 'warning',
+          });
+        }
+
+        // Automatic seaport closure: rarer — only at severe outbreak levels.
+        if (!closedSeaports.has(country.id) && outbreakRatio > 0.10 &&
+            effectiveVisibility > OUTBREAK_VISIBILITY_THRESHOLD + 0.15 &&
+            Math.random() < wealthMod * 0.15 * prev.gameSpeed) {
+          closedSeaports.add(country.id);
+          newNews.push({
+            day: prev.day,
+            text: `${country.name} has sealed its seaports to incoming cargo! ⚓🚫`,
+            type: 'warning',
+          });
+        }
+
+        if (country.closed) return;
         const closeChance = effectiveVisibility * wealthMod * 0.02 * prev.gameSpeed;
         if (country.infected > country.population * 0.05 && Math.random() < closeChance) {
           country.closed = true;
@@ -328,6 +444,10 @@ export function useGameState() {
         gameWon: allDead,
         news: [...newNews, ...prev.news].slice(0, 50),
         cureStarted,
+        closedAirports: Array.from(closedAirports),
+        closedSeaports: Array.from(closedSeaports),
+        activeFlights: flightsToday,
+        activeShips: shipsToday,
       };
     });
   }, []);
@@ -340,7 +460,7 @@ export function useGameState() {
     setGameState(prev => ({ ...prev, isRunning: !prev.isRunning }));
   }, []);
 
-  // Manual border closure (costs DNA)
+  // Manual border closure (costs DNA) — shuts land borders AND all travel links.
   const closeBorders = useCallback((countryId: string) => {
     setGameState(prev => {
       const country = prev.countries.find(c => c.id === countryId);
@@ -356,7 +476,7 @@ export function useGameState() {
       const newNews = [...prev.news];
       newNews.unshift({
         day: prev.day,
-        text: `You have closed ${country.name}'s borders! (-${cost} DNA)`,
+        text: `You have closed ${country.name}'s borders! Flights and shipping suspended. (-${cost} DNA)`,
         type: 'warning',
       });
 
@@ -364,6 +484,54 @@ export function useGameState() {
         ...prev,
         countries: newCountries,
         dnaPoints: prev.dnaPoints - cost,
+        news: newNews.slice(0, 50),
+      };
+    });
+  }, []);
+
+  // Emergency airport shutdown (cheaper than full border closure, air only).
+  const closeAirports = useCallback((countryId: string) => {
+    setGameState(prev => {
+      const country = prev.countries.find(c => c.id === countryId);
+      if (!country || prev.closedAirports.includes(countryId)) return prev;
+      const cost = country.wealth === 'wealthy' ? 8 : country.wealth === 'developing' ? 6 : 4;
+      if (prev.dnaPoints < cost) return prev;
+
+      const newNews = [...prev.news];
+      newNews.unshift({
+        day: prev.day,
+        text: `${country.name} has shut its airports by emergency decree. ✈️🚫 (-${cost} DNA)`,
+        type: 'warning',
+      });
+
+      return {
+        ...prev,
+        dnaPoints: prev.dnaPoints - cost,
+        closedAirports: [...prev.closedAirports, countryId],
+        news: newNews.slice(0, 50),
+      };
+    });
+  }, []);
+
+  // Emergency seaport quarantine (sea only).
+  const closeSeaports = useCallback((countryId: string) => {
+    setGameState(prev => {
+      const country = prev.countries.find(c => c.id === countryId);
+      if (!country || prev.closedSeaports.includes(countryId)) return prev;
+      const cost = country.wealth === 'wealthy' ? 6 : country.wealth === 'developing' ? 5 : 3;
+      if (prev.dnaPoints < cost) return prev;
+
+      const newNews = [...prev.news];
+      newNews.unshift({
+        day: prev.day,
+        text: `${country.name} has quarantined its seaports — no cargo boarding. ⚓🚫 (-${cost} DNA)`,
+        type: 'warning',
+      });
+
+      return {
+        ...prev,
+        dnaPoints: prev.dnaPoints - cost,
+        closedSeaports: [...prev.closedSeaports, countryId],
         news: newNews.slice(0, 50),
       };
     });
@@ -399,5 +567,7 @@ export function useGameState() {
     togglePause,
     getAvailableEvolutions,
     closeBorders,
+    closeAirports,
+    closeSeaports,
   };
 }

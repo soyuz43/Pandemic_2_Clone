@@ -13,6 +13,8 @@ export interface Evolution {
     drugResistance?: number;
     visibility?: number;
     stealth?: number;
+    airTransmission?: number; // additive boost to flight seeding power
+    seaTransmission?: number; // additive boost to shipping seeding power
   };
   requires?: string[];
 }
@@ -27,13 +29,13 @@ export const evolutions: Evolution[] = [
   { id: 'necrosis', name: 'Necrosis', description: '+20% severity, +15% lethality', category: 'symptom', cost: 25, effect: { severity: 0.20, lethality: 0.15, visibility: 0.10 }, requires: ['hemorrhage'] },
   { id: 'coma', name: 'Coma', description: '+25% severity, +20% lethality', category: 'symptom', cost: 40, effect: { severity: 0.25, lethality: 0.20, visibility: 0.12 }, requires: ['necrosis'] },
   
-  // Transmission
-  { id: 'air1', name: 'Air Transmission I', description: '+10% infectivity', category: 'transmission', cost: 5, effect: { infectivity: 0.10 } },
-  { id: 'air2', name: 'Air Transmission II', description: '+20% infectivity', category: 'transmission', cost: 15, effect: { infectivity: 0.20 }, requires: ['air1'] },
-  { id: 'water1', name: 'Water Transmission I', description: '+10% infectivity', category: 'transmission', cost: 5, effect: { infectivity: 0.10 } },
-  { id: 'water2', name: 'Water Transmission II', description: '+20% infectivity', category: 'transmission', cost: 15, effect: { infectivity: 0.20 }, requires: ['water1'] },
+  // Transmission — travel network boosters (air/sea seeding power)
+  { id: 'air1', name: 'Air Transmission I', description: '+10% infectivity, doubles flight transmission', category: 'transmission', cost: 5, effect: { infectivity: 0.10, airTransmission: 1.0 } },
+  { id: 'air2', name: 'Air Transmission II', description: '+20% infectivity, triples flight transmission', category: 'transmission', cost: 15, effect: { infectivity: 0.20, airTransmission: 2.0 }, requires: ['air1'] },
+  { id: 'water1', name: 'Water Transmission I', description: '+10% infectivity, doubles shipping transmission', category: 'transmission', cost: 5, effect: { infectivity: 0.10, seaTransmission: 1.0 } },
+  { id: 'water2', name: 'Water Transmission II', description: '+20% infectivity, triples shipping transmission', category: 'transmission', cost: 15, effect: { infectivity: 0.20, seaTransmission: 2.0 }, requires: ['water1'] },
   { id: 'blood', name: 'Blood Transmission', description: '+15% infectivity, +5% severity', category: 'transmission', cost: 10, effect: { infectivity: 0.15, severity: 0.05 } },
-  { id: 'insect', name: 'Insect Transmission', description: '+15% infectivity', category: 'transmission', cost: 12, effect: { infectivity: 0.15 } },
+  { id: 'insect', name: 'Insect Transmission', description: '+15% infectivity, boosts both flight and shipping spread', category: 'transmission', cost: 12, effect: { infectivity: 0.15, airTransmission: 0.5, seaTransmission: 0.5 } },
   { id: 'rodent', name: 'Rodent Transmission', description: '+12% infectivity', category: 'transmission', cost: 10, effect: { infectivity: 0.12 } },
   { id: 'livestock', name: 'Livestock Transmission', description: '+12% infectivity', category: 'transmission', cost: 10, effect: { infectivity: 0.12 } },
   
