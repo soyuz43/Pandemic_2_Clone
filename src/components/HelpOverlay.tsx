@@ -1,42 +1,79 @@
-import { useState, useEffect } from 'react';
-
 interface HelpOverlayProps {
   onClose: () => void;
 }
 
 export default function HelpOverlay({ onClose }: HelpOverlayProps) {
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setVisible(false);
-      onClose();
-    }, 12000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  if (!visible) return null;
-
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none">
-      <div className="bg-black/90 border border-green-500/50 rounded-xl p-6 max-w-sm mx-4 pointer-events-auto animate-fade-in">
-        <h3 className="text-green-400 font-bold text-sm mb-3 flex items-center gap-2">
-          <span>💡</span> How to Play
-        </h3>
-        <div className="text-[11px] text-gray-300 space-y-2">
-          <p>🧬 <strong className="text-yellow-400">Earn DNA</strong> - Your disease earns DNA points as it infects people.</p>
-          <p>🦠 <strong className="text-red-400">Evolve</strong> - Spend DNA to unlock symptoms, transmission methods, and abilities.</p>
-          <p>🌍 <strong className="text-blue-400">Spread</strong> - Your disease spreads to connected countries automatically.</p>
-          <p>🔒 <strong className="text-orange-400">Borders</strong> - Wealthy countries may close borders if your disease is visible.</p>
-          <p>💊 <strong className="text-purple-400">Cure</strong> - If your disease is too visible, scientists will start researching a cure!</p>
-          <p>💀 <strong className="text-red-500">Win</strong> - Kill 95% of the world population before a cure is found.</p>
+    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="panel max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="panel-header flex items-center justify-between">
+          <span>How to Play</span>
+          <button onClick={onClose} className="btn text-xs px-2 py-0">✕</button>
         </div>
-        <button
-          onClick={() => { setVisible(false); onClose(); }}
-          className="mt-3 w-full bg-green-800 hover:bg-green-700 text-white text-xs py-1.5 rounded transition-colors"
-        >
-          Got it!
-        </button>
+        <div className="p-4 space-y-4 text-xs">
+          <div>
+            <div className="text-green font-bold mb-1">Objective</div>
+            <p className="text-dim">
+              Evolve your pathogen to eliminate 95% of the world population before scientists develop a cure.
+            </p>
+          </div>
+
+          <div>
+            <div className="text-yellow font-bold mb-1">DNA Points</div>
+            <p className="text-dim">
+              Earn DNA as your disease infects people. Spend DNA to evolve symptoms, transmission methods, and abilities.
+            </p>
+          </div>
+
+          <div>
+            <div className="text-blue font-bold mb-1">Spread</div>
+            <p className="text-dim">
+              Your disease spreads automatically to connected countries. Climate and wealth affect infection rates.
+            </p>
+          </div>
+
+          <div>
+            <div className="text-red font-bold mb-1">Visibility</div>
+            <p className="text-dim">
+              Severe symptoms increase visibility. High visibility triggers border closures and cure research.
+            </p>
+          </div>
+
+          <div className="border-t border-subtle pt-3">
+            <div className="text-dim font-bold mb-2 uppercase tracking-wider text-[10px]">Controls</div>
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="flex items-center gap-2">
+                <span className="kbd">Space</span>
+                <span className="text-dim">Pause/Resume</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="kbd">1</span><span className="kbd">2</span><span className="kbd">3</span>
+                <span className="text-dim">Speed</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="kbd">Click</span>
+                <span className="text-dim">Select country</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="kbd">Right-click</span>
+                <span className="text-dim">Country info</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="kbd">Scroll</span>
+                <span className="text-dim">Zoom map</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="kbd">Drag</span>
+                <span className="text-dim">Pan map</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="p-3 border-t border-subtle">
+          <button onClick={onClose} className="btn btn-primary w-full py-2">
+            Got it
+          </button>
+        </div>
       </div>
     </div>
   );

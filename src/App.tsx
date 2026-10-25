@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameState } from './hooks/useGameState';
 import StartScreen from './components/StartScreen';
 import GameHeader from './components/GameHeader';
@@ -31,13 +31,37 @@ export default function App() {
     setShowHelp(false);
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (showStartScreen || gameState.gameOver) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePause();
+      } else if (e.key === '1') {
+        setGameSpeed(1);
+      } else if (e.key === '2') {
+        setGameSpeed(2);
+      } else if (e.key === '3') {
+        setGameSpeed(3);
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        setShowHelp(true);
+      } else if (e.key === 'Escape') {
+        setShowHelp(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showStartScreen, gameState.gameOver, togglePause, setGameSpeed]);
+
   if (showStartScreen) {
     return <StartScreen onStart={handleStart} />;
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Header */}
+    <div className="h-screen flex flex-col bg-dark overflow-hidden">
       <GameHeader
         gameState={gameState}
         onTogglePause={togglePause}
@@ -45,7 +69,6 @@ export default function App() {
         onShowHelp={() => setShowHelp(true)}
       />
 
-      {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left panel - Evolution */}
         <div className="w-64 flex-shrink-0 p-2 overflow-hidden">
@@ -66,14 +89,13 @@ export default function App() {
               startCountry={gameState.startCountry}
             />
           </div>
-          {/* News ticker at bottom */}
           <div className="h-36 flex-shrink-0">
             <NewsTicker news={gameState.news} />
           </div>
         </div>
 
         {/* Right panel - Stats */}
-        <div className="w-64 flex-shrink-0 p-2 overflow-y-auto">
+        <div className="w-64 flex-shrink-0 p-2 overflow-hidden">
           <StatsPanel
             gameState={gameState}
             selectedCountry={selectedCountry}
@@ -81,12 +103,10 @@ export default function App() {
         </div>
       </div>
 
-      {/* Help overlay */}
       {showHelp && (
         <HelpOverlay onClose={() => setShowHelp(false)} />
       )}
 
-      {/* Game Over overlay */}
       {gameState.gameOver && (
         <GameOverScreen gameState={gameState} onRestart={handleRestart} />
       )}
