@@ -45,16 +45,20 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
 
       <div className="flex-1 scrollable p-3 space-y-3">
         {/* Global stats */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <div className="stat-block border-green/30">
             <div className="stat-value text-green">
-              {formatNumber(gameState.totalPopulation - gameState.totalInfected - gameState.totalDead)}
+              {formatNumber(gameState.totalPopulation - gameState.totalInfected - gameState.totalRecovered - gameState.totalDead)}
             </div>
             <div className="stat-label text-green">Healthy</div>
           </div>
           <div className="stat-block border-red/30">
             <div className="stat-value text-red">{formatNumber(gameState.totalInfected)}</div>
             <div className="stat-label text-red">Infected</div>
+          </div>
+          <div className="stat-block border-green/30">
+            <div className="stat-value text-green">{formatNumber(gameState.totalRecovered)}</div>
+            <div className="stat-label text-green">Recovered</div>
           </div>
           <div className="stat-block">
             <div className="stat-value text-dim">{formatNumber(gameState.totalDead)}</div>
@@ -194,6 +198,12 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
                 {(gameState.seaTransmission * 100).toFixed(0)}%
               </span>
             </div>
+            <div className="data-row">
+              <span className="data-label">Waterborne Spread</span>
+              <span className={`data-value ${gameState.waterTransmission >= 0.5 ? 'text-green' : 'text-dim'}`}>
+                {(gameState.waterTransmission * 100).toFixed(0)}%
+              </span>
+            </div>
           </div>
         </div>
 
@@ -239,6 +249,10 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
                 <span className="data-value text-red">{formatNumber(selectedCountry.infected)}</span>
               </div>
               <div className="data-row">
+                <span className="data-label">Recovered</span>
+                <span className="data-value text-green">{formatNumber(selectedCountry.recovered)}</span>
+              </div>
+              <div className="data-row">
                 <span className="data-label">Dead</span>
                 <span className="data-value text-dim">{formatNumber(selectedCountry.dead)}</span>
               </div>
@@ -253,6 +267,20 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
               <div className="data-row">
                 <span className="data-label">Connections</span>
                 <span className="data-value">{selectedCountry.connections.length}</span>
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-subtle">
+              <div className="text-[10px] text-dim uppercase tracking-wider font-bold mb-1">Local Water Sources</div>
+              <div className="space-y-2">
+                {gameState.waterRegions.filter(region => region.countryId === selectedCountry.id).map(region => (
+                  <div key={region.id}>
+                    <div className="flex justify-between text-[9px] mb-1">
+                      <span>{region.name}</span>
+                      <span className="text-dim">Risk {(region.vulnerability * 100).toFixed(0)}% · Contam {(region.contamination * 100).toFixed(0)}%</span>
+                    </div>
+                    <ProgressBar value={region.contamination * 100} max={100} color="#4a9a9a" />
+                  </div>
+                ))}
               </div>
             </div>
           </div>

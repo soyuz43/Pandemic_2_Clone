@@ -92,7 +92,6 @@ export default function App() {
               onCloseSeaports={closeSeaports}
               closedAirports={gameState.closedAirports}
               closedSeaports={gameState.closedSeaports}
-              dnaPoints={gameState.dnaPoints}
             />
           </div>
           <div className="h-36 flex-shrink-0">
