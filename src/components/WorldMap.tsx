@@ -51,7 +51,19 @@ const countryIdToIso: Record<string, string> = {
   saudi: '682',
   egypt: '818',
   nigeria: '566',
+  ethiopia: '231',
+  kenya: '404',
+  tanzania: '834',
+  dr_congo: '180',
+  angola: '024',
+  namibia: '516',
+  botswana: '072',
+  zambia: '894',
   south_africa: '710',
+  mozambique: '508',
+  malawi: '454',
+  zimbabwe: '716',
+  madagascar: '450',
   indonesia: '360',
   australia: '036',
 };
@@ -75,13 +87,20 @@ function getCountryColor(country: Country): string {
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-// Fictional country node coordinates (same space as countries.ts) for travel lines.
+// Fictional country node coordinates (capital cities, same space as countries.ts) for travel lines.
 const NODE_POS: Record<string, [number, number]> = {
-  usa: [-100, 40], canada: [-98, 58], mexico: [-102, 24], brazil: [-55, -10],
+  usa: [-87.6, 41.9], // Chicago
+  canada: [-98, 58], mexico: [-102, 24], brazil: [-55, -10],
   argentina: [-65, -35], colombia: [-74, 3], uk: [-2, 53], france: [2, 47],
   germany: [10, 51], spain: [-4, 40], italy: [12.5, 42], russia: [60, 55],
   china: [105, 35], india: [78, 22], japan: [138, 37], korea: [127, 36],
-  saudi: [45, 24], egypt: [30, 27], nigeria: [8, 10], south_africa: [25, -29],
+  saudi: [45, 24], egypt: [30, 27], nigeria: [8, 10],
+  ethiopia: [38.7, 9], kenya: [36.8, -1.3], tanzania: [35.7, -6.2],
+  dr_congo: [15.3, -4.3], angola: [13.2, -8.8], namibia: [17.1, -22.6],
+  botswana: [25.9, -24.7], zambia: [28.3, -15.4],
+  south_africa: [28, -26.2], // Johannesburg
+  mozambique: [32.6, -25.9], malawi: [35, -14], zimbabwe: [28.5, -19],
+  madagascar: [47.5, -18.9], // Antananarivo
   indonesia: [115, -3], australia: [134, -25],
 };
 

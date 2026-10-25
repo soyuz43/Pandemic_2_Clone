@@ -2,7 +2,19 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Country, initialCountries } from '../data/countries';
 import { evolutions, Evolution } from '../data/evolutions';
 import { DiseaseType, getDiseaseType } from '../data/diseaseTypes';
-import { allRoutes } from '../data/routes';
+import { allRoutes, namedRoutes, type TradeRoute } from '../data/routes';
+
+// Friendly game-city names for news headlines (fictional: usa node = Chicago, south_africa node = Johannesburg).
+const CITY_NAMES: Record<string, string> = Object.fromEntries(
+  namedRoutes.flatMap(r => [[r.from, r.fromCity], [r.to, r.toCity]] as [string, string][])
+);
+function cityName(route: TradeRoute, side: 'from' | 'to'): string {
+  const id = route[side];
+  if ('fromCity' in route && route.fromCity) {
+    return side === 'from' ? (route as typeof route & { fromCity: string }).fromCity : (route as typeof route & { toCity: string }).toCity;
+  }
+  return CITY_NAMES[id] || initialCountries.find(c => c.id === id)?.name || id;
+}
 
 export interface GameState {
   countries: Country[];
@@ -226,8 +238,8 @@ export function useGameState() {
             newNews.push({
               day: prev.day,
               text: isAir
-                ? `${prev.diseaseName} reached ${dest.name} aboard a flight from ${origin.name}!`
-                : `${prev.diseaseName} reached ${dest.name} hidden aboard cargo ships from ${origin.name}!`,
+                ? `${prev.diseaseName} reached ${cityName(route, 'to')} aboard a flight from ${cityName(route, 'from')}!`
+                : `${prev.diseaseName} reached ${cityName(route, 'to')} hidden aboard cargo ships from ${cityName(route, 'from')}!`,
               type: 'danger',
             });
           }
