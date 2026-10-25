@@ -17,8 +17,8 @@ export default function NewsTicker({ news }: NewsTickerProps) {
         ) : (
           news.map((item, idx) => (
             <div key={idx} className={`news-item ${item.type}`}>
-              <span className="text-dim font-mono mr-2">D{item.day}</span>
-              <span>{item.text}</span>
+              <span className="text-gray-400 font-mono mr-2">D{item.day}</span>
+              <span className="text-gray-200">{item.text}</span>
             </div>
           ))
         )}

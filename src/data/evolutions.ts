@@ -12,6 +12,7 @@ export interface Evolution {
     coldResistance?: number;
     drugResistance?: number;
     visibility?: number;
+    stealth?: number;
   };
   requires?: string[];
 }
@@ -44,4 +45,11 @@ export const evolutions: Evolution[] = [
   { id: 'drug1', name: 'Drug Resistance I', description: '+25% drug resistance', category: 'ability', cost: 10, effect: { drugResistance: 0.25 } },
   { id: 'drug2', name: 'Drug Resistance II', description: '+50% drug resistance', category: 'ability', cost: 25, effect: { drugResistance: 0.50 }, requires: ['drug1'] },
   { id: 'genetic', name: 'Genetic Reshuffle', description: 'Slows cure research by 50%', category: 'ability', cost: 30, effect: { drugResistance: 0.30 }, requires: ['drug2'] },
+  
+  // Stealth - reduces visibility
+  { id: 'asymptomatic1', name: 'Asymptomatic I', description: '-15% visibility, +5% infectivity', category: 'ability', cost: 8, effect: { stealth: 0.15, infectivity: 0.05 } },
+  { id: 'asymptomatic2', name: 'Asymptomatic II', description: '-25% visibility, +10% infectivity', category: 'ability', cost: 20, effect: { stealth: 0.25, infectivity: 0.10 }, requires: ['asymptomatic1'] },
+  { id: 'incubation', name: 'Long Incubation', description: '-20% visibility, delays detection', category: 'ability', cost: 15, effect: { stealth: 0.20 } },
+  { id: 'mimicry', name: 'Symptom Mimicry', description: '-30% visibility, mimics common cold', category: 'ability', cost: 25, effect: { stealth: 0.30 }, requires: ['asymptomatic1', 'incubation'] },
+  { id: 'latent', name: 'Latent Infection', description: '-40% visibility, hard to detect', category: 'ability', cost: 40, effect: { stealth: 0.40 }, requires: ['mimicry'] },
 ];
