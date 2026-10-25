@@ -10,7 +10,7 @@ import GameOverScreen from './components/GameOverScreen';
 import HelpOverlay from './components/HelpOverlay';
 
 export default function App() {
-  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions } = useGameState();
+  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions, closeBorders } = useGameState();
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [showStartScreen, setShowStartScreen] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -19,8 +19,8 @@ export default function App() {
     ? gameState.countries.find(c => c.id === selectedCountryId) || null
     : null;
 
-  const handleStart = (name: string, countryId: string) => {
-    startGame(name, countryId);
+  const handleStart = (name: string, countryId: string, diseaseType: any) => {
+    startGame(name, countryId, diseaseType);
     setShowStartScreen(false);
     setShowHelp(true);
   };
@@ -87,6 +87,8 @@ export default function App() {
               selectedCountry={selectedCountryId}
               onSelectCountry={setSelectedCountryId}
               startCountry={gameState.startCountry}
+              onCloseBorders={closeBorders}
+              dnaPoints={gameState.dnaPoints}
             />
           </div>
           <div className="h-36 flex-shrink-0">
