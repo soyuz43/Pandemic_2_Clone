@@ -5,40 +5,19 @@ interface NewsTickerProps {
 }
 
 export default function NewsTicker({ news }: NewsTickerProps) {
-  const typeColors = {
-    info: 'text-blue-300 border-blue-900/50',
-    warning: 'text-yellow-300 border-yellow-900/50',
-    danger: 'text-red-300 border-red-900/50',
-    success: 'text-green-300 border-green-900/50',
-  };
-
-  const typeIcons = {
-    info: 'ℹ️',
-    warning: '⚠️',
-    danger: '☠️',
-    success: '✅',
-  };
-
   return (
-    <div className="bg-black/60 rounded-lg border border-green-900/50 overflow-hidden">
-      <div className="p-2 bg-gradient-to-r from-red-900/30 to-transparent border-b border-green-900/50">
-        <h2 className="text-red-400 font-bold text-xs flex items-center gap-2">
-          <span className="animate-pulse">📰</span> NEWS FEED
-        </h2>
+    <div className="panel h-full flex flex-col">
+      <div className="panel-header flex items-center gap-2">
+        <span>News Feed</span>
+        <span className="text-dim text-[9px] ml-auto">{news.length} events</span>
       </div>
-      <div className="h-32 overflow-y-auto p-1 space-y-0.5 scrollbar-thin">
+      <div className="flex-1 scrollable p-2 space-y-1">
         {news.length === 0 ? (
-          <div className="text-gray-600 text-[10px] text-center py-4">No news yet...</div>
+          <div className="text-muted text-[10px] text-center py-4">No events yet</div>
         ) : (
           news.map((item, idx) => (
-            <div
-              key={idx}
-              className={`text-[10px] px-2 py-1 rounded border-l-2 ${typeColors[item.type]} bg-black/30 ${
-                idx === 0 ? 'animate-pulse' : ''
-              }`}
-            >
-              <span className="mr-1">{typeIcons[item.type]}</span>
-              <span className="text-gray-500 font-mono mr-1">Day {item.day}:</span>
+            <div key={idx} className={`news-item ${item.type}`}>
+              <span className="text-dim font-mono mr-2">D{item.day}</span>
               <span>{item.text}</span>
             </div>
           ))

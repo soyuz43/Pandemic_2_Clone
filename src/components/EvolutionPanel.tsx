@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Evolution, evolutions } from '../data/evolutions';
 import { GameState } from '../hooks/useGameState';
 
@@ -7,60 +8,58 @@ interface EvolutionPanelProps {
   getAvailableEvolutions: () => Evolution[];
 }
 
-function EvolutionNode({ evo, unlocked, available, canAfford, onEvolve }: {
+function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
   evo: Evolution;
   unlocked: boolean;
   available: boolean;
   canAfford: boolean;
   onEvolve: (id: string) => void;
 }) {
-  const categoryColors = {
-    symptom: 'border-red-500 bg-red-900/30',
-    transmission: 'border-blue-500 bg-blue-900/30',
-    ability: 'border-purple-500 bg-purple-900/30',
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const handleClick = () => {
+    if (available && canAfford && !unlocked) {
+      onEvolve(evo.id);
+    }
   };
 
-  const categoryIcons = {
-    symptom: '🦠',
-    transmission: '🔄',
-    ability: '🧬',
+  const categoryColors = {
+    symptom: 'text-red',
+    transmission: 'text-blue',
+    ability: 'text-purple-400',
   };
 
   return (
-    <button
-      onClick={() => available && canAfford && onEvolve(evo.id)}
-      disabled={!available || !canAfford || unlocked}
-      className={`w-full text-left p-2 rounded border transition-all ${
-        unlocked
-          ? 'border-green-500 bg-green-900/40 opacity-80'
-          : available && canAfford
-          ? `${categoryColors[evo.category]} hover:opacity-100 cursor-pointer hover:scale-[1.02]`
-          : available
-          ? 'border-gray-600 bg-gray-900/30 opacity-50 cursor-not-allowed'
-          : 'border-gray-700 bg-gray-900/20 opacity-30 cursor-not-allowed'
-      }`}
+    <div
+      className={`evo-card ${unlocked ? 'unlocked' : ''} ${!unlocked && available && canAfford ? 'affordable' : ''} ${!available || (!canAfford && !unlocked) ? 'locked' : ''}`}
+      onClick={handleClick}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <span className="text-sm">{categoryIcons[evo.category]}</span>
-          <span className={`text-xs font-bold ${unlocked ? 'text-green-300' : 'text-white'}`}>
-            {evo.name}
-          </span>
-        </div>
+        <span className={`text-xs font-bold ${unlocked ? 'text-green' : categoryColors[evo.category]}`}>
+          {evo.name}
+        </span>
         {!unlocked && (
-          <span className={`text-xs font-mono ${canAfford ? 'text-yellow-400' : 'text-red-400'}`}>
-            {evo.cost} DNA
+          <span className={`text-[10px] font-mono ${canAfford ? 'text-yellow' : 'text-red'}`}>
+            {evo.cost}
           </span>
         )}
-        {unlocked && <span className="text-green-400 text-xs">✓</span>}
+        {unlocked && <span className="text-green text-[10px]">✓</span>}
       </div>
-      <div className="text-[10px] text-gray-400 mt-0.5">{evo.description}</div>
-      {evo.requires && !unlocked && (
-        <div className="text-[9px] text-gray-500 mt-0.5">
-          Requires: {evo.requires.join(', ')}
+
+      {showTooltip && (
+        <div className="tooltip left-0 top-full mt-1">
+          <div className="font-bold mb-1">{evo.name}</div>
+          <div className="text-dim">{evo.description}</div>
+          {evo.requires && !unlocked && (
+            <div className="text-muted mt-1">
+              Requires: {evo.requires.join(', ')}
+            </div>
+          )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -71,25 +70,21 @@ export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolut
   const abilities = evolutions.filter(e => e.category === 'ability');
 
   return (
-    <div className="h-full flex flex-col bg-black/60 rounded-lg border border-green-900/50 overflow-hidden">
-      <div className="p-2 bg-gradient-to-r from-green-900/50 to-transparent border-b border-green-900/50">
-        <h2 className="text-green-400 font-bold text-sm flex items-center gap-2">
-          <span>🧬</span> EVOLVE
-          <span className="text-yellow-400 font-mono text-xs ml-auto">
-            {Math.floor(gameState.dnaPoints)} DNA
-          </span>
-        </h2>
+    <div className="panel h-full flex flex-col">
+      <div className="panel-header flex items-center justify-between">
+        <span>Evolve</span>
+        <span className="text-yellow font-mono">{Math.floor(gameState.dnaPoints)} DNA</span>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-2 space-y-3 scrollbar-thin">
+      <div className="flex-1 scrollable p-2 space-y-3">
         {/* Symptoms */}
         <div>
-          <h3 className="text-red-400 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-            <span>🦠</span> Symptoms
-          </h3>
+          <div className="text-red text-[10px] font-bold uppercase tracking-wider mb-2">
+            Symptoms
+          </div>
           <div className="space-y-1">
             {symptoms.map(evo => (
-              <EvolutionNode
+              <EvolutionCard
                 key={evo.id}
                 evo={evo}
                 unlocked={gameState.unlockedEvolutions.includes(evo.id)}
@@ -103,12 +98,12 @@ export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolut
 
         {/* Transmission */}
         <div>
-          <h3 className="text-blue-400 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-            <span>🔄</span> Transmission
-          </h3>
+          <div className="text-blue text-[10px] font-bold uppercase tracking-wider mb-2">
+            Transmission
+          </div>
           <div className="space-y-1">
             {transmissions.map(evo => (
-              <EvolutionNode
+              <EvolutionCard
                 key={evo.id}
                 evo={evo}
                 unlocked={gameState.unlockedEvolutions.includes(evo.id)}
@@ -122,12 +117,12 @@ export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolut
 
         {/* Abilities */}
         <div>
-          <h3 className="text-purple-400 text-[10px] font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-            <span>🧬</span> Abilities
-          </h3>
+          <div className="text-purple-400 text-[10px] font-bold uppercase tracking-wider mb-2">
+            Abilities
+          </div>
           <div className="space-y-1">
             {abilities.map(evo => (
-              <EvolutionNode
+              <EvolutionCard
                 key={evo.id}
                 evo={evo}
                 unlocked={gameState.unlockedEvolutions.includes(evo.id)}

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ComposableMap,
   Geographies,
@@ -12,6 +12,13 @@ interface WorldMapProps {
   selectedCountry: string | null;
   onSelectCountry: (id: string) => void;
   startCountry: string | null;
+}
+
+interface ContextMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  countryId: string | null;
 }
 
 // Map our country IDs to ISO 3166-1 Alpha-3 codes used by the TopoJSON
@@ -40,7 +47,6 @@ const countryIdToIso: Record<string, string> = {
   australia: '036',
 };
 
-// Reverse mapping
 const isoToCountryId: Record<string, string> = Object.fromEntries(
   Object.entries(countryIdToIso).map(([k, v]) => [v, k])
 );
@@ -61,7 +67,14 @@ function getCountryColor(country: Country): string {
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
 export default function WorldMap({ countries, selectedCountry, onSelectCountry, startCountry }: WorldMapProps) {
-  // Build a lookup for quick access
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    countryId: null,
+  });
+  const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+
   const countryLookup = useMemo(() => {
     const lookup: Record<string, Country> = {};
     countries.forEach(c => {
@@ -71,10 +84,26 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
     return lookup;
   }, [countries]);
 
+  const hoveredCountryData = hoveredCountry ? countries.find(c => c.id === hoveredCountry) : null;
   const selectedCountryData = selectedCountry ? countries.find(c => c.id === selectedCountry) : null;
 
+  const handleContextMenu = (e: React.MouseEvent, countryId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      countryId,
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0, countryId: null });
+  };
+
   return (
-    <div className="relative w-full h-full bg-[#0a1628] rounded-lg overflow-hidden border border-green-900/50">
+    <div className="panel h-full relative" onClick={closeContextMenu}>
       <ComposableMap
         projectionConfig={{
           rotate: [-10, 0, 0],
@@ -91,15 +120,21 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
                 const country = countryLookup[isoCode];
                 const isSelected = countryId === selectedCountry;
                 const isStart = countryId === startCountry;
+                const isHovered = countryId === hoveredCountry;
                 
-                let fillColor = '#1a3a1a'; // Default untracked country
-                let strokeColor = '#0a2a0a';
-                let strokeWidth = 0.5;
+                let fillColor = '#1a2a1a';
+                let strokeColor = '#0a1a0a';
+                let strokeWidth = 0.3;
 
                 if (country) {
                   fillColor = getCountryColor(country);
                   strokeColor = isSelected ? '#ffffff' : isStart ? '#ffd700' : '#000000';
-                  strokeWidth = isSelected ? 1.5 : isStart ? 1 : 0.5;
+                  strokeWidth = isSelected ? 1.5 : isStart ? 1 : 0.3;
+                }
+
+                if (isHovered && country) {
+                  strokeColor = '#ffffff';
+                  strokeWidth = 1;
                 }
 
                 return (
@@ -112,9 +147,16 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
                     onClick={() => {
                       if (countryId) onSelectCountry(countryId);
                     }}
+                    onContextMenu={(e) => {
+                      if (countryId) handleContextMenu(e, countryId);
+                    }}
+                    onMouseEnter={() => {
+                      if (countryId) setHoveredCountry(countryId);
+                    }}
+                    onMouseLeave={() => setHoveredCountry(null)}
                     style={{
                       outline: 'none',
-                      transition: 'fill 0.3s',
+                      cursor: countryId ? 'pointer' : 'default',
                     } as React.CSSProperties}
                   />
                 );
@@ -124,45 +166,126 @@ export default function WorldMap({ countries, selectedCountry, onSelectCountry, 
         </ZoomableGroup>
       </ComposableMap>
 
-      {/* Legend */}
-      <div className="absolute bottom-2 left-2 bg-black/80 rounded p-2 text-[10px] text-green-300 border border-green-900/50">
-        <div className="font-bold mb-1">Infection Level</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#1a3a1a]"></span> Untracked</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#2d5a27]"></span> Clean</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#ffdd00]"></span> Low</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#ff6600]"></span> Medium</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#cc3300]"></span> High</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#8b0000]"></span> Critical</div>
-        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#4a4a4a]"></span> Closed</div>
-      </div>
-
-      {/* Selected country tooltip */}
-      {selectedCountryData && (
-        <div className="absolute top-2 right-2 bg-black/90 text-white text-xs p-3 rounded border border-green-500/30 min-w-[160px]">
-          <div className="font-bold text-green-400 mb-1">{selectedCountryData.name}</div>
-          <div className="space-y-0.5 text-[10px]">
-            <div>Population: {(selectedCountryData.population / 1000000).toFixed(1)}M</div>
-            {selectedCountryData.infected > 0 && (
-              <div className="text-red-400">
-                Infected: {((selectedCountryData.infected / selectedCountryData.population) * 100).toFixed(2)}%
+      {/* Hover tooltip */}
+      {hoveredCountryData && !contextMenu.visible && (
+        <div className="tooltip top-2 left-2">
+          <div className="font-bold text-green mb-1">{hoveredCountryData.name}</div>
+          <div className="space-y-0.5">
+            <div>Pop: {(hoveredCountryData.population / 1000000).toFixed(1)}M</div>
+            {hoveredCountryData.infected > 0 && (
+              <div className="text-red">
+                Infected: {((hoveredCountryData.infected / hoveredCountryData.population) * 100).toFixed(2)}%
               </div>
             )}
-            {selectedCountryData.dead > 0 && (
-              <div className="text-gray-400">
-                Dead: {((selectedCountryData.dead / selectedCountryData.population) * 100).toFixed(2)}%
+            {hoveredCountryData.dead > 0 && (
+              <div className="text-dim">
+                Dead: {((hoveredCountryData.dead / hoveredCountryData.population) * 100).toFixed(2)}%
               </div>
             )}
-            {selectedCountryData.closed && <div className="text-orange-400">🔒 BORDERS CLOSED</div>}
-            <div className="text-gray-500">Climate: {selectedCountryData.climate}</div>
-            <div className="text-gray-500">Wealth: {selectedCountryData.wealth}</div>
-            <div className="text-gray-500">Connections: {selectedCountryData.connections.length}</div>
+            {hoveredCountryData.closed && <div className="text-red">[BORDERS CLOSED]</div>}
+            <div className="text-dim mt-1">Click to select • Right-click for menu</div>
           </div>
         </div>
       )}
 
-      {/* Map controls hint */}
-      <div className="absolute top-2 left-2 bg-black/60 rounded px-2 py-1 text-[9px] text-gray-500 border border-green-900/30">
-        Scroll to zoom • Drag to pan
+      {/* Context menu */}
+      {contextMenu.visible && contextMenu.countryId && (() => {
+        const country = countries.find(c => c.id === contextMenu.countryId);
+        if (!country) return null;
+
+        return (
+          <div
+            className="context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="context-menu-item font-bold text-green border-b border-subtle">
+              {country.name}
+            </div>
+            <div className="context-menu-item text-dim">
+              Population: {(country.population / 1000000).toFixed(1)}M
+            </div>
+            {country.infected > 0 && (
+              <div className="context-menu-item text-red">
+                Infected: {((country.infected / country.population) * 100).toFixed(2)}%
+              </div>
+            )}
+            {country.dead > 0 && (
+              <div className="context-menu-item text-dim">
+                Dead: {((country.dead / country.population) * 100).toFixed(2)}%
+              </div>
+            )}
+            <div className="context-menu-item text-dim">
+              Climate: {country.climate}
+            </div>
+            <div className="context-menu-item text-dim">
+              Wealth: {country.wealth}
+            </div>
+            {country.closed && (
+              <div className="context-menu-item text-red">
+                [BORDERS CLOSED]
+              </div>
+            )}
+            <div className="context-menu-item text-dim">
+              Connections: {country.connections.length}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Selected country info panel */}
+      {selectedCountryData && (
+        <div className="absolute top-2 right-2 panel p-2 text-[10px] min-w-[160px]">
+          <div className="font-bold text-green mb-1 border-b border-subtle pb-1">
+            {selectedCountryData.name}
+            {selectedCountryData.closed && <span className="text-red ml-2">[CLOSED]</span>}
+          </div>
+          <div className="space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-dim">Population:</span>
+              <span>{(selectedCountryData.population / 1000000).toFixed(1)}M</span>
+            </div>
+            {selectedCountryData.infected > 0 && (
+              <div className="flex justify-between">
+                <span className="text-dim">Infected:</span>
+                <span className="text-red">{((selectedCountryData.infected / selectedCountryData.population) * 100).toFixed(2)}%</span>
+              </div>
+            )}
+            {selectedCountryData.dead > 0 && (
+              <div className="flex justify-between">
+                <span className="text-dim">Dead:</span>
+                <span>{((selectedCountryData.dead / selectedCountryData.population) * 100).toFixed(2)}%</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-dim">Climate:</span>
+              <span className="text-blue">{selectedCountryData.climate}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-dim">Wealth:</span>
+              <span className="text-yellow">{selectedCountryData.wealth}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="absolute bottom-2 left-2 panel p-2 text-[9px]">
+        <div className="font-bold mb-1 text-dim uppercase tracking-wider">Infection</div>
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#1a2a1a]"></span> Untracked</div>
+          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#2d5a27]"></span> Clean</div>
+          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#ffdd00]"></span> Low</div>
+          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#ff6600]"></span> Medium</div>
+          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#cc3300]"></span> High</div>
+          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#8b0000]"></span> Critical</div>
+          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#4a4a4a]"></span> Closed</div>
+        </div>
+      </div>
+
+      {/* Controls hint */}
+      <div className="absolute bottom-2 right-2 panel px-2 py-1 text-[9px] text-dim">
+        Scroll: zoom • Drag: pan • Right-click: info
       </div>
     </div>
   );
