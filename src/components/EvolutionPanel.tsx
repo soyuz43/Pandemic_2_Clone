@@ -6,13 +6,28 @@ interface EvolutionPanelProps {
   gameState: GameState;
   onEvolve: (id: string) => void;
   getAvailableEvolutions: () => Evolution[];
+  getEvolutionCost: (evo: Evolution) => number;
 }
 
-function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
+// Branch display info (label + accent color class).
+const BRANCHES: { id: string; label: string; color: string }[] = [
+  { id: 'symptom',    label: 'Symptoms',       color: 'text-red' },
+  { id: 'air',        label: 'Air Travel',     color: 'text-sky-400' },
+  { id: 'sea',        label: 'Sea Travel',     color: 'text-cyan-400' },
+  { id: 'water',      label: 'Waterborne',     color: 'text-blue' },
+  { id: 'vector',     label: 'Vectors',        color: 'text-emerald-400' },
+  { id: 'climate',    label: 'Climate',        color: 'text-amber-400' },
+  { id: 'resistance', label: 'Drug Resistance',color: 'text-fuchsia-400' },
+  { id: 'stealth',    label: 'Stealth',        color: 'text-purple-400' },
+  { id: 'specialist', label: 'Specializations',color: 'text-orange-400' },
+];
+
+function EvolutionCard({ evo, unlocked, available, canAfford, cost, onEvolve }: {
   evo: Evolution;
   unlocked: boolean;
   available: boolean;
   canAfford: boolean;
+  cost: number;
   onEvolve: (id: string) => void;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -32,6 +47,7 @@ function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
   return (
     <div
       className={`evo-card ${unlocked ? 'unlocked' : ''} ${!unlocked && available && canAfford ? 'affordable' : ''} ${!available || (!canAfford && !unlocked) ? 'locked' : ''}`}
+      style={{ marginLeft: evo.tier * 10 }}
       onClick={handleClick}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
@@ -39,10 +55,11 @@ function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
       <div className="flex items-center justify-between">
         <span className={`text-xs font-bold ${unlocked ? 'text-green' : categoryColors[evo.category]}`}>
           {evo.name}
+          {evo.tradeoff && <span className="ml-1 text-orange-400" title={evo.drawback}>⚠</span>}
         </span>
         {!unlocked && (
           <span className={`text-[10px] font-mono ${canAfford ? 'text-yellow' : 'text-red'}`}>
-            {evo.cost}
+            {cost}
           </span>
         )}
         {unlocked && <span className="text-green text-[10px]">✓</span>}
@@ -52,6 +69,9 @@ function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
         <div className="tooltip left-0 top-full mt-1">
           <div className="font-bold mb-1">{evo.name}</div>
           <div className="text-dim">{evo.description}</div>
+          {evo.tradeoff && evo.drawback && (
+            <div className="text-orange-400 mt-1">Trade-off: {evo.drawback}</div>
+          )}
           {evo.requires && !unlocked && (
             <div className="text-muted mt-1">
               Requires: {evo.requires.join(', ')}
@@ -63,11 +83,8 @@ function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
   );
 }
 
-export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolutions }: EvolutionPanelProps) {
+export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolutions, getEvolutionCost }: EvolutionPanelProps) {
   const available = getAvailableEvolutions();
-  const symptoms = evolutions.filter(e => e.category === 'symptom');
-  const transmissions = evolutions.filter(e => e.category === 'transmission');
-  const abilities = evolutions.filter(e => e.category === 'ability');
 
   return (
     <div className="panel h-full flex flex-col">
@@ -75,64 +92,35 @@ export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolut
         <span>Evolve</span>
         <span className="text-yellow font-mono">{Math.floor(gameState.dnaPoints)} DNA</span>
       </div>
-      
+
       <div className="flex-1 scrollable p-2 space-y-3">
-        {/* Symptoms */}
-        <div>
-          <div className="text-red text-[10px] font-bold uppercase tracking-wider mb-2">
-            Symptoms
-          </div>
-          <div className="space-y-1">
-            {symptoms.map(evo => (
-              <EvolutionCard
-                key={evo.id}
-                evo={evo}
-                unlocked={gameState.unlockedEvolutions.includes(evo.id)}
-                available={available.some(a => a.id === evo.id)}
-                canAfford={gameState.dnaPoints >= evo.cost}
-                onEvolve={onEvolve}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Transmission */}
-        <div>
-          <div className="text-blue text-[10px] font-bold uppercase tracking-wider mb-2">
-            Transmission
-          </div>
-          <div className="space-y-1">
-            {transmissions.map(evo => (
-              <EvolutionCard
-                key={evo.id}
-                evo={evo}
-                unlocked={gameState.unlockedEvolutions.includes(evo.id)}
-                available={available.some(a => a.id === evo.id)}
-                canAfford={gameState.dnaPoints >= evo.cost}
-                onEvolve={onEvolve}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Abilities */}
-        <div>
-          <div className="text-purple-400 text-[10px] font-bold uppercase tracking-wider mb-2">
-            Abilities
-          </div>
-          <div className="space-y-1">
-            {abilities.map(evo => (
-              <EvolutionCard
-                key={evo.id}
-                evo={evo}
-                unlocked={gameState.unlockedEvolutions.includes(evo.id)}
-                available={available.some(a => a.id === evo.id)}
-                canAfford={gameState.dnaPoints >= evo.cost}
-                onEvolve={onEvolve}
-              />
-            ))}
-          </div>
-        </div>
+        {BRANCHES.map(branch => {
+          const items = evolutions.filter(e => e.branch === branch.id);
+          if (items.length === 0) return null;
+          return (
+            <div key={branch.id}>
+              <div className={`${branch.color} text-[10px] font-bold uppercase tracking-wider mb-2`}>
+                {branch.label}
+              </div>
+              <div className="space-y-1">
+                {items.map(evo => {
+                  const cost = getEvolutionCost(evo);
+                  return (
+                    <EvolutionCard
+                      key={evo.id}
+                      evo={evo}
+                      unlocked={gameState.unlockedEvolutions.includes(evo.id)}
+                      available={available.some(a => a.id === evo.id)}
+                      canAfford={gameState.dnaPoints >= cost}
+                      cost={cost}
+                      onEvolve={onEvolve}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

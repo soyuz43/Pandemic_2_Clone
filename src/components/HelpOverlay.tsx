@@ -21,21 +21,21 @@ export default function HelpOverlay({ onClose }: HelpOverlayProps) {
           <div>
             <div className="text-yellow font-bold mb-1">DNA Points</div>
             <p className="text-dim">
-              Earn diminishing DNA from new infections and deaths. Close borders for free; airport and seaport shutdowns still cost DNA.
+              Earn diminishing DNA from new infections and deaths. DNA income scales with the size of your outbreak and slows as the world immunises.
             </p>
           </div>
 
           <div>
             <div className="text-blue font-bold mb-1">Spread</div>
             <p className="text-dim">
-              Your disease spreads locally, across land connections, and over two-way flight and shipping corridors. Recovered people gain immunity; water-capable pathogens contaminate treated, groundwater, and surface-water sources. These are country-level exposure estimates, not detailed geographic water tables. Hover route lines to inspect traffic and status.
+              Your disease spreads locally, across land connections, and over two-way flight and shipping corridors. Recovered people gain immunity; water-capable pathogens contaminate each country's own named water sources (rivers, aquifers, reservoirs) at staggered rates. These are country-level exposure estimates, not detailed geographic water tables. Hover route lines to inspect traffic and status.
             </p>
           </div>
 
           <div>
             <div className="text-red font-bold mb-1">Visibility</div>
             <p className="text-dim">
-              Severe symptoms increase visibility. High visibility triggers border closures and cure research.
+              Severe symptoms increase visibility. Visibility speeds up detection, which drives a country's panic response, and it also gates when researchers begin hunting a cure.
             </p>
           </div>
 
