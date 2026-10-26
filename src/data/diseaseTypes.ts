@@ -44,9 +44,9 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     name: 'Bacteria',
     description: 'Balanced pathogen with moderate evolution speed and average resistance to all factors. The reliable choice.',
     icon: '🔬',
-    dnaMultiplier: 1.0,
+    dnaMultiplier: 1.8,
     evolutionMultiplier: 1.0,
-    startingInfectivity: 0.1,
+    startingInfectivity: 0.18,
     startingVisibility: 0.0,
     climateResistanceBonus: 0,
     mutationChance: 0.005,
@@ -60,9 +60,9 @@ export const diseaseTypes: Record<DiseaseType, DiseaseTypeConfig> = {
     name: 'Parasite',
     description: 'Slow to evolve but nearly invisible and highly resilient. Hard to detect, hard to kill. Patient players only.',
     icon: '🐛',
-    dnaMultiplier: 0.7, // 30% slower DNA gain
+    dnaMultiplier: 2.6, // higher DNA gain to offset expensive evolutions
     evolutionMultiplier: 1.3, // 30% more expensive evolutions
-    startingInfectivity: 0.08,
+    startingInfectivity: 0.18,
     startingVisibility: -0.05, // Starts with negative visibility (harder to detect)
     climateResistanceBonus: 0.25,
     mutationChance: 0.001,

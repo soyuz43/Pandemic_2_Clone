@@ -19,15 +19,35 @@ function cityName(route: TradeRoute, side: 'from' | 'to'): string {
 }
 
 // Simulation tuning (fictional game values)
-export const INITIAL_DNA = 15;
+export const INITIAL_DNA = 60;
 export const DNA_BANK_CAP = 250;
 export const BASE_SPREAD_RATE = 0.15;
 export const TARGET_BASE_REPRODUCTION = 1.06;
-export const DNA_PER_TICK_CAP = 1.5;
-export const DNA_CASE_SCALE = 0.35;
-export const DNA_DEATH_SCALE = 0.12;
-export const DNA_DAMPING_CASES = 250_000;
+export const DNA_PER_TICK_CAP = 6;
+export const DNA_CASE_SCALE = 0.7;
+export const DNA_DEATH_SCALE = 0.02;
+export const DNA_DAMPING_CASES = 50_000_000;
 export const WATER_SPREAD_RATE = 0.001;
+
+/**
+ * Base rate at which the infected population recovers.
+ *
+ * This is deliberately decoupled from the disease's starting infectivity.
+ * Coupling the two (as an earlier revision did) means that raising
+ * infectivity to push R0 above 1 also speeds recovery by the same factor,
+ * which cancels the benefit and leaves the epidemic burning out before the
+ * player can afford enough lethality.
+ */
+export const RECOVERY_RATE = 0.06;
+
+/**
+ * How strongly lethality suppresses recovery.
+ *
+ * At 2.0 the suppression curve decays smoothly from 1.0 (no lethality) to 0
+ * (maximum lethality), so a maximally lethal pathogen stops recovery entirely
+ * and the 95% kill win condition becomes reachable.
+ */
+export const LETHALITY_RECOVERY_SUPPRESSION = 2.0;
 
 
 // Travel network tuning (fictional game values)
@@ -223,8 +243,11 @@ export function tick(prev: GameState, random: Rng): TickResult {
       newDeathsToday += newDeaths;
     }
 
-    const recoverySuppression = Math.max(0.01, 1 - prev.lethality * 1.98);
-    const recoveryRate = diseaseConfig.startingInfectivity * BASE_SPREAD_RATE / TARGET_BASE_REPRODUCTION * recoverySuppression * prev.gameSpeed;
+    // Lethality suppresses recovery. The curve decays from 1.0 (no lethality)
+    // to 0 (maximum lethality), so a fully lethal pathogen stops recovery and
+    // the 95% kill win condition is reachable.
+    const recoverySuppression = Math.max(0, 1 - prev.lethality * LETHALITY_RECOVERY_SUPPRESSION);
+    const recoveryRate = RECOVERY_RATE * BASE_SPREAD_RATE / TARGET_BASE_REPRODUCTION * recoverySuppression * prev.gameSpeed;
     const recoveries = Math.min(country.infected, country.infected * recoveryRate);
     country.infected -= recoveries;
     country.recovered += recoveries;
