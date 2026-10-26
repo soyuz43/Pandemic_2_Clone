@@ -14,6 +14,10 @@ import type { GameState, NewsItem } from '../lib/gameState';
 
 export type { GameState, NewsItem } from '../lib/gameState';
 
+/** Wall-clock duration of one simulation day at 1x speed, in milliseconds. */
+export const BASE_DAY_DURATION_MS = 30_000;
+export const GAME_SPEEDS = [1, 2, 3, 5] as const;
+
 export function useGameState() {
   const [gameState, setGameState] = useState<GameState>({
     countries: [],
@@ -50,6 +54,8 @@ export function useGameState() {
     closedSeaports: [],
     activeFlights: 0,
     activeShips: 0,
+    inTransitFlights: 0,
+    inTransitShips: 0,
   });
 
   const intervalRef = useRef<number | null>(null);
@@ -68,7 +74,11 @@ export function useGameState() {
   const tick = useCallback(() => {
     setGameState(prev => {
       if (!prev.isRunning || prev.gameOver) return prev;
-      return simulateTick(prev, Math.random).state;
+      const result = simulateTick(prev, Math.random);
+      if (result.gameOver) {
+        return { ...result.state, isRunning: false };
+      }
+      return result.state;
     });
   }, []);
 
@@ -82,17 +92,16 @@ export function useGameState() {
 
   // Game loop
   useEffect(() => {
-    if (gameState.isRunning && !gameState.gameOver) {
-      const speed = 800; // Fixed interval
-      intervalRef.current = window.setInterval(tick, speed);
-    }
+      if (gameState.isRunning && !gameState.gameOver) {
+        intervalRef.current = window.setInterval(tick, BASE_DAY_DURATION_MS / gameState.gameSpeed);
+      }
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [gameState.isRunning, gameState.gameOver, tick]);
+  }, [gameState.isRunning, gameState.gameOver, gameState.gameSpeed, tick]);
 
   /** Effective cost of an evolution for the current disease type. */
   const getEvolutionCost = useCallback((evo: Evolution): number => {

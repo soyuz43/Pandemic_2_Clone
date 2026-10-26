@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ComposableMap,
   Geographies,
@@ -9,7 +9,8 @@ import {
 } from 'react-simple-maps';
 import { Country } from '../data/countries';
 import type { WaterRegionState } from '../data/waterSystems';
-import { allRoutes, namedRoutes } from '../data/routes';
+import { allRoutes, namedRoutes, type TradeRoute } from '../data/routes';
+import { PlaneIcon, ShipIcon } from './icons';
 
 interface WorldMapProps {
   countries: Country[];
@@ -105,6 +106,63 @@ const NODE_POS: Record<string, [number, number]> = {
 
 type TravelFilter = 'all' | 'air' | 'sea';
 
+interface TravelVehicle {
+  id: number;
+  routeId: string;
+  kind: 'air' | 'sea';
+  from: [number, number];
+  to: [number, number];
+  progress: number;
+  speed: number;
+  reverse: boolean;
+}
+
+const MAX_VISIBLE_VEHICLES = 72;
+
+function buildTravelVehicles(routes: TradeRoute[]): TravelVehicle[] {
+  const maxTraffic = Math.max(...routes.map(route => route.traffic), 1);
+  const weighted: { route: TradeRoute; weight: number }[] = [];
+  let totalWeight = 0;
+  routes.forEach(route => {
+    const weight = Math.sqrt(Math.max(0, route.traffic) / maxTraffic) * (route.kind === 'air' ? 0.7 : 0.3);
+    if (weight > 0.06) {
+      weighted.push({ route, weight });
+      totalWeight += weight;
+    }
+  });
+
+  if (totalWeight === 0) return [];
+
+  const vehicles: TravelVehicle[] = [];
+  let target = 0;
+  for (let index = 0; index < MAX_VISIBLE_VEHICLES; index++) {
+    target += totalWeight / MAX_VISIBLE_VEHICLES;
+    let cumulative = 0;
+    let selected = weighted[0];
+    let selectedWeight = weighted[0].weight;
+    for (const item of weighted) {
+      cumulative += item.weight;
+      if (cumulative >= target) {
+        selected = item;
+        selectedWeight = item.weight;
+        break;
+      }
+    }
+
+    vehicles.push({
+      id: index,
+      routeId: selected.route.id,
+      kind: selected.route.kind,
+      from: NODE_POS[selected.route.from],
+      to: NODE_POS[selected.route.to],
+      progress: ((index * 37) % 100) / 100,
+      speed: 0.045 + selectedWeight * 0.075,
+      reverse: index % 2 === 1,
+    });
+  }
+  return vehicles;
+}
+
 const namedRouteById = new Map(namedRoutes.map(route => [route.id, route]));
 
 export default function WorldMap({
@@ -141,6 +199,46 @@ export default function WorldMap({
   const visibleRoutes = useMemo(() => {
     return allRoutes.filter(r => travelFilter === 'all' || r.kind === travelFilter);
   }, [travelFilter]);
+
+  const travelVehicles = useMemo(() => buildTravelVehicles(visibleRoutes), [visibleRoutes]);
+  const vehicleAnimationRef = useRef<number | null>(null);
+  const vehicleProgressRef = useRef<Map<number, number>>(new Map());
+  const [, setVehicleAnimationFrame] = useState(0);
+
+  useEffect(() => {
+    vehicleProgressRef.current = new Map(
+      travelVehicles.map(vehicle => {
+        const current = vehicleProgressRef.current.get(vehicle.id);
+        return [vehicle.id, current ?? vehicle.progress] as const;
+      })
+    );
+    if (!showTravel || travelVehicles.length === 0) {
+      setVehicleAnimationFrame(0);
+      return;
+    }
+
+    let previousTime: number | null = null;
+    const animate = (time: number) => {
+      if (previousTime !== null) {
+        const delta = Math.min(0.1, (time - previousTime) / 1000);
+        travelVehicles.forEach(vehicle => {
+          const progress = vehicleProgressRef.current.get(vehicle.id) ?? vehicle.progress;
+          vehicleProgressRef.current.set(vehicle.id, (progress + delta * vehicle.speed) % 1);
+        });
+        setVehicleAnimationFrame(frame => (frame + 1) % 1_000_000);
+      }
+      previousTime = time;
+      vehicleAnimationRef.current = window.requestAnimationFrame(animate);
+    };
+
+    vehicleAnimationRef.current = window.requestAnimationFrame(animate);
+    return () => {
+      if (vehicleAnimationRef.current !== null) {
+        window.cancelAnimationFrame(vehicleAnimationRef.current);
+        vehicleAnimationRef.current = null;
+      }
+    };
+  }, [showTravel, travelVehicles]);
 
   const hoveredCountryData = hoveredCountry ? countries.find(c => c.id === hoveredCountry) : null;
   const hoveredRoute = hoveredRouteId ? visibleRoutes.find(route => route.id === hoveredRouteId) : null;
@@ -262,6 +360,37 @@ export default function WorldMap({
             );
           })}
 
+          {showTravel && travelVehicles.map(vehicle => {
+            const route = visibleRoutes.find(item => item.id === vehicle.routeId);
+            if (!route) return null;
+
+            const isAir = vehicle.kind === 'air';
+            const shut =
+              closedCountrySet.has(route.from) || closedCountrySet.has(route.to) || (isAir
+                ? closedAirportSet.has(route.from) || closedAirportSet.has(route.to)
+                : closedSeaportSet.has(route.from) || closedSeaportSet.has(route.to));
+            if (shut) return null;
+
+            const rawProgress = vehicleProgressRef.current.get(vehicle.id) ?? vehicle.progress;
+            const progress = vehicle.reverse ? 1 - rawProgress : rawProgress;
+            const x = vehicle.from[0] + (vehicle.to[0] - vehicle.from[0]) * progress;
+            const y = vehicle.from[1] + (vehicle.to[1] - vehicle.from[1]) * progress;
+            const dx = vehicle.to[0] - vehicle.from[0];
+            const dy = vehicle.to[1] - vehicle.from[1];
+            const rotation = Math.atan2(vehicle.reverse ? -dy : dy, vehicle.reverse ? -dx : dx) * 180 / Math.PI;
+            const Icon = isAir ? PlaneIcon : ShipIcon;
+
+            return (
+              <g
+                key={`vehicle-${vehicle.id}`}
+                transform={`translate(${x} ${y}) rotate(${rotation}) scale(0.42)`}
+                style={{ pointerEvents: 'none' }}
+              >
+                <Icon size={22} className={isAir ? 'text-red' : 'text-orange'} />
+              </g>
+            );
+          })}
+
           {/* Airport / seaport status markers */}
           {showTravel && countries.map(c => {
             const pos = NODE_POS[c.id];
@@ -270,9 +399,17 @@ export default function WorldMap({
             const portShut = closedSeaportSet.has(c.id) || c.closed;
             return (
               <Marker key={`mk-${c.id}`} coordinates={[pos[0], pos[1] - 2.5]} style={{ pointerEvents: 'none' }}>
-                <text textAnchor="middle" fontSize={airportShut ? 7 : 6} opacity={airportShut ? 0.5 : 0.95}>
-                  {airportShut ? '🛬' : '✈️'}{portShut ? '' : ' ⚓'}
-                </text>
+                <g transform="translate(-8 -6)">
+                  <PlaneIcon
+                    size={8}
+                    className={airportShut ? 'text-red opacity-50' : 'text-blue'}
+                  />
+                </g>
+                {!portShut && (
+                  <g transform="translate(0 -6)">
+                    <ShipIcon size={8} className="text-orange" />
+                  </g>
+                )}
               </Marker>
             );
           })}
@@ -286,7 +423,11 @@ export default function WorldMap({
           onClick={() => setShowTravel(v => !v)}
           title="Toggle flight & shipping routes"
         >
-          ✈️⚓ Traffic {showTravel ? 'ON' : 'OFF'}
+          <span className="flex items-center gap-1">
+            <PlaneIcon size={10} />
+            <ShipIcon size={10} />
+            Traffic {showTravel ? 'ON' : 'OFF'}
+          </span>
         </button>
         {showTravel && (['all', 'air', 'sea'] as TravelFilter[]).map(f => (
           <button
@@ -294,7 +435,12 @@ export default function WorldMap({
             className={`btn text-[9px] px-2 py-0.5 ${travelFilter === f ? 'btn-primary' : ''}`}
             onClick={() => setTravelFilter(f)}
           >
-            {f === 'all' ? 'All' : f === 'air' ? '✈️ Air' : '⚓ Sea'}
+            {f === 'all' ? 'All' : (
+              <span className="flex items-center gap-1">
+                {f === 'air' ? <PlaneIcon size={10} /> : <ShipIcon size={10} />}
+                {f === 'air' ? 'Air' : 'Sea'}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -304,7 +450,7 @@ export default function WorldMap({
           <div><span className="text-blue">━</span> Blue / teal: open air / sea route</div>
           <div><span className="text-red">━</span> Red / orange: infected endpoint</div>
           <div><span className="text-dim">┄</span> Gray dashed: route closed</div>
-          <div className="text-dim mt-1">Hover a line for route details</div>
+          <div className="text-dim mt-1">Icons show live traffic; hover a line for route details</div>
         </div>
       )}
 
@@ -316,7 +462,10 @@ export default function WorldMap({
               ? `${namedRouteById.get(hoveredRoute.id)!.fromCity} → ${namedRouteById.get(hoveredRoute.id)!.toCity}`
               : `${countries.find(c => c.id === hoveredRoute.from)?.name || hoveredRoute.from} → ${countries.find(c => c.id === hoveredRoute.to)?.name || hoveredRoute.to}`}
           </div>
-          <div>{hoveredRoute.kind === 'air' ? '✈ Flight corridor' : '⚓ Shipping corridor'}</div>
+          <div className="flex items-center gap-1">
+            {hoveredRoute.kind === 'air' ? <PlaneIcon size={10} /> : <ShipIcon size={10} />}
+            {hoveredRoute.kind === 'air' ? 'Flight corridor' : 'Shipping corridor'}
+          </div>
           <div>Relative traffic: {hoveredRoute.traffic.toLocaleString()} game units/day</div>
           <div className="text-dim">
             {closedCountrySet.has(hoveredRoute.from) || closedCountrySet.has(hoveredRoute.to) ||
@@ -395,10 +544,10 @@ export default function WorldMap({
               <div className="context-menu-item text-red">[BORDERS CLOSED]</div>
             )}
             {closedAirportSet.has(country.id) && (
-              <div className="context-menu-item text-dim">✈️ Airports shut</div>
+              <div className="context-menu-item text-dim flex items-center gap-1"><PlaneIcon size={10} /> Airports shut</div>
             )}
             {closedSeaportSet.has(country.id) && (
-              <div className="context-menu-item text-dim">⚓ Seaports quarantined</div>
+              <div className="context-menu-item text-dim flex items-center gap-1"><ShipIcon size={10} /> Seaports quarantined</div>
             )}
             {showWater && (
               <div className="context-menu-item">

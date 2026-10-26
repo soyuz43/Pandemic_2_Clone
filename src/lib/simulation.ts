@@ -59,6 +59,8 @@ export const SEA_BASE_POWER = 0.4;   // baseline shipping-spreading power
 export const AIRPORT_CLOSE_THRESHOLD = 150_000;
 export const SEAPORT_CLOSE_THRESHOLD = 400_000;
 export const BORDER_CLOSE_THRESHOLD = 750_000;
+/** Relative volume units represented by one live flight/shipping vehicle. */
+export const VEHICLE_CAPACITY = 12;
 /** Fraction of a country's population that, if reached, also triggers closure. */
 export const PANIC_POPULATION_FRACTION = 0.05;
 
@@ -142,6 +144,8 @@ export function createInitialState(
     closedSeaports: [],
     activeFlights: 0,
     activeShips: 0,
+    inTransitFlights: 0,
+    inTransitShips: 0,
   };
 }
 
@@ -168,6 +172,8 @@ export function tick(prev: GameState, random: Rng): TickResult {
   const closedSeaports = new Set(prev.closedSeaports);
   let flightsToday = 0;
   let shipsToday = 0;
+  let flightsInTransit = 0;
+  let shipsInTransit = 0;
 
   // ---- FLIGHT & SHIP TRAFFIC LAYER ----
   // Every open corridor carries traffic in both directions. If either endpoint
@@ -190,8 +196,14 @@ export function tick(prev: GameState, random: Rng): TickResult {
     // Traffic still flies/sails between open countries — it just can't seed
     // across a shut frontier. Count live traffic for the HUD/overlay.
     if (!transportClosed) {
-      if (isAir) flightsToday += route.traffic;
-      else shipsToday += route.traffic;
+      const vehicleCount = Math.max(1, Math.round(route.traffic / VEHICLE_CAPACITY));
+      if (isAir) {
+        flightsToday += route.traffic;
+        flightsInTransit += vehicleCount;
+      } else {
+        shipsToday += route.traffic;
+        shipsInTransit += vehicleCount;
+      }
     }
 
     if (transportClosed) return;            // nothing crosses a closed frontier
@@ -355,7 +367,7 @@ export function tick(prev: GameState, random: Rng): TickResult {
         closedAirports.add(country.id);
         newNews.push({
           day: prev.day,
-          text: `${country.name} has shut its airports amid ${Math.floor(infected / 1000)}k infections! ✈️🚫`,
+          text: `${country.name} has shut its airports amid ${Math.floor(infected / 1000)}k infections!`,
           type: 'warning',
         });
       }
@@ -369,7 +381,7 @@ export function tick(prev: GameState, random: Rng): TickResult {
         closedSeaports.add(country.id);
         newNews.push({
           day: prev.day,
-          text: `${country.name} has sealed its seaports to incoming cargo! ⚓🚫`,
+          text: `${country.name} has sealed its seaports to incoming cargo!`,
           type: 'warning',
         });
       }
@@ -522,6 +534,8 @@ export function tick(prev: GameState, random: Rng): TickResult {
     waterRegions: newWaterRegions,
     activeFlights: flightsToday,
     activeShips: shipsToday,
+    inTransitFlights: flightsInTransit,
+    inTransitShips: shipsInTransit,
   };
 
   return {
