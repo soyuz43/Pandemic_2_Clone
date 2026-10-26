@@ -20,11 +20,20 @@ export default function StartScreen({ onStart }: StartScreenProps) {
   return (
     <div className="min-h-screen bg-dark flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <h1 className="text-4xl font-black text-white mb-1 tracking-tight">
             PANDEMIC 2
           </h1>
-          <p className="text-dim text-sm">Disease Simulator</p>
+          <p className="text-dim text-sm mb-4">Disease Simulator</p>
+          <div className="flex items-center justify-center gap-2 text-[10px] uppercase tracking-wider">
+            <span className={step === 0 ? 'text-green' : 'text-muted'}>
+              1 · Pathogen
+            </span>
+            <span className="text-muted">—</span>
+            <span className={step === 1 ? 'text-green' : 'text-muted'}>
+              2 · Origin
+            </span>
+          </div>
         </div>
 
         {step === 0 && (
@@ -108,8 +117,11 @@ export default function StartScreen({ onStart }: StartScreenProps) {
 
         {step === 1 && (
           <div className="panel">
-            <div className="panel-header text-center">
+            <div className="panel-header text-center flex items-center justify-center gap-2">
               Select Origin Country
+              <span className="text-green normal-case tracking-normal">
+                ({initialCountries.find(c => c.id === selectedCountry)?.name})
+              </span>
             </div>
             <div className="p-4">
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-64 scrollable mb-4">
@@ -117,19 +129,28 @@ export default function StartScreen({ onStart }: StartScreenProps) {
                   <button
                     key={country.id}
                     onClick={() => setSelectedCountry(country.id)}
+                    aria-pressed={selectedCountry === country.id}
                     className={`panel p-2 text-left transition-all ${
                       selectedCountry === country.id
                         ? 'border-green text-green bg-[#0d1a0d]'
                         : 'hover:border-[#555]'
                     }`}
                   >
-                    <div className="text-xs font-bold">{country.name}</div>
+                    <div className="text-xs font-bold flex items-center gap-1">
+                      {country.name}
+                      {selectedCountry === country.id && (
+                        <span className="text-green text-[9px]">✓</span>
+                      )}
+                    </div>
                     <div className="text-[9px] text-dim mt-1">
                       {(country.population / 1000000).toFixed(0)}M
                     </div>
                     <div className="flex gap-1 mt-1">
                       <span className="text-[8px] px-1 bg-[#1a1a1a] border border-subtle">
                         {country.climate}
+                      </span>
+                      <span className="text-[8px] px-1 bg-[#1a1a1a] border border-subtle">
+                        {country.wealth}
                       </span>
                     </div>
                   </button>
@@ -161,3 +182,5 @@ export default function StartScreen({ onStart }: StartScreenProps) {
     </div>
   );
 }
+
+

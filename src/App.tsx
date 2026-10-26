@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useGameState } from './hooks/useGameState';
 import StartScreen from './components/StartScreen';
 import GameHeader from './components/GameHeader';
@@ -14,6 +14,7 @@ export default function App() {
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [showStartScreen, setShowStartScreen] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
+  const [evoPanelCollapsed, setEvoPanelCollapsed] = useState(false);
 
   const selectedCountry = selectedCountryId
     ? gameState.countries.find(c => c.id === selectedCountryId) || null
@@ -31,10 +32,20 @@ export default function App() {
     setShowHelp(false);
   };
 
+  const toggleEvoPanel = useCallback(() => {
+    setEvoPanelCollapsed(prev => !prev);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (showStartScreen || gameState.gameOver) return;
+
+      // Never hijack keys while the player is typing somewhere.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -47,6 +58,8 @@ export default function App() {
         setGameSpeed(3);
       } else if (e.key === '4') {
         setGameSpeed(5);
+      } else if (e.key === 'e' || e.key === 'E') {
+        toggleEvoPanel();
       } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         setShowHelp(true);
       } else if (e.key === 'Escape') {
@@ -56,7 +69,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showStartScreen, gameState.gameOver, togglePause, setGameSpeed]);
+  }, [showStartScreen, gameState.gameOver, togglePause, setGameSpeed, toggleEvoPanel]);
 
   if (showStartScreen) {
     return <StartScreen onStart={handleStart} />;
@@ -69,22 +82,25 @@ export default function App() {
         onTogglePause={togglePause}
         onSetSpeed={setGameSpeed}
         onShowHelp={() => setShowHelp(true)}
+        onToggleEvoPanel={toggleEvoPanel}
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left panel - Evolution */}
-        <div className="w-64 flex-shrink-0 p-2 overflow-hidden">
+        {/* Left panel - Evolution rail (collapsible) */}
+        <div className={`flex-shrink-0 p-2 overflow-hidden transition-[width] duration-200 ${evoPanelCollapsed ? 'w-12' : 'w-72'}`}>
           <EvolutionPanel
             gameState={gameState}
             onEvolve={evolve}
             getAvailableEvolutions={getAvailableEvolutions}
             getEvolutionCost={getEvolutionCost}
+            collapsed={evoPanelCollapsed}
+            onToggleCollapsed={toggleEvoPanel}
           />
         </div>
 
         {/* Center - World Map */}
         <div className="flex-1 p-2 flex flex-col gap-2 min-w-0">
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 relative">
             <WorldMap
               countries={gameState.countries}
               selectedCountry={selectedCountryId}
