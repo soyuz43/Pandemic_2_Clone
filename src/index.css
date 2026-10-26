@@ -6,10 +6,22 @@
     background: #0d0d0d;
     color: #e0e0e0;
     overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   * {
     box-sizing: border-box;
+  }
+
+  /* Visible, consistent focus ring for keyboard users. */
+  :focus-visible {
+    outline: 1px solid #7ddf7d;
+    outline-offset: 1px;
+  }
+
+  button:focus:not(:focus-visible) {
+    outline: none;
   }
 }
 
@@ -27,6 +39,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    flex-shrink: 0;
   }
 
   .btn {
@@ -37,46 +50,61 @@
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    white-space: nowrap;
   }
 
-  .btn:hover {
+  .btn:hover:not(:disabled) {
     background: #2a2a2a;
     border-color: #555;
+    color: #eee;
   }
 
-  .btn:active {
+  .btn:active:not(:disabled) {
     background: #333;
   }
 
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   .btn-primary {
-    border: 1px solid #2d6b2d;
+    border-color: #2d6b2d;
     background: #1a3a1a;
     color: #7ddf7d;
   }
 
-  .btn-primary:hover {
+  .btn-primary:hover:not(:disabled) {
     background: #244a24;
     border-color: #3d8b3d;
+    color: #a8f0a8;
   }
 
   .btn-danger {
-    border: 1px solid #6b2d2d;
+    border-color: #6b2d2d;
     background: #3a1a1a;
     color: #df7d7d;
   }
 
-  .btn-danger:hover {
+  .btn-danger:hover:not(:disabled) {
     background: #4a2424;
     border-color: #8b3d3d;
+    color: #f0a8a8;
   }
 
   .data-row {
     display: flex;
     justify-content: space-between;
+    align-items: baseline;
     padding: 3px 0;
     font-size: 11px;
     border-bottom: 1px solid #1a1a1a;
+    gap: 8px;
   }
 
   .data-row:last-child {
@@ -90,6 +118,7 @@
   .data-value {
     color: #ddd;
     font-weight: 600;
+    text-align: right;
   }
 
   .context-menu {
@@ -98,7 +127,7 @@
     border: 1px solid #444;
     z-index: 1000;
     min-width: 180px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   }
 
   .context-menu-item {
@@ -142,39 +171,69 @@
     transition: width 0.3s ease;
   }
 
+  /* ---- Evolution cards ---- */
   .evo-card {
     border: 1px solid #333;
     background: #0f0f0f;
-    padding: 6px 8px;
+    padding: 5px 7px;
     cursor: pointer;
-    transition: border-color 0.1s, background 0.1s;
+    transition: border-color 0.12s, background 0.12s, opacity 0.12s;
     position: relative;
+    font-family: inherit;
+    color: inherit;
+    display: block;
+    width: 100%;
+    text-align: left;
   }
 
-  .evo-card:hover {
+  .evo-card:hover:not(:disabled) {
     border-color: #555;
     background: #1a1a1a;
   }
 
+  /* Purchased. */
   .evo-card.unlocked {
+    border-color: #2d6b2d;
+    background: #0d1a0d;
+    cursor: default;
+  }
+
+  .evo-card.unlocked:hover {
     border-color: #2d6b2d;
     background: #0d1a0d;
   }
 
+  /* Prereqs not met yet — visible but clearly inert. */
   .evo-card.locked {
-    opacity: 0.4;
+    opacity: 0.55;
+    cursor: not-allowed;
+    border-style: dashed;
+  }
+
+  /* Unlocked but not yet affordable. */
+  .evo-card.too_expensive {
+    opacity: 0.65;
     cursor: not-allowed;
   }
 
-  .evo-card.affordable {
+  /* Affordable and ready to buy — draws the eye. */
+  .evo-card.buyable {
     border-color: #6b6b2d;
+    background: #141405;
   }
 
+  .evo-card.buyable:hover:not(:disabled) {
+    border-color: #dfdf7d;
+    background: #1c1c0a;
+  }
+
+  /* ---- News ---- */
   .news-item {
     padding: 4px 8px;
     font-size: 10px;
     border-left: 2px solid #333;
     margin-bottom: 2px;
+    background: #0f0f0f;
   }
 
   .news-item.info { border-left-color: #4a7ab5; }
@@ -186,6 +245,7 @@
     border: 1px solid #333;
     padding: 6px 8px;
     text-align: center;
+    background: #0f0f0f;
   }
 
   .stat-block .stat-value {
@@ -203,6 +263,7 @@
 
   .scrollable {
     overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-width: thin;
     scrollbar-color: #333 #111;
   }
@@ -232,12 +293,22 @@
     color: #aaa;
     font-family: inherit;
   }
+
+  /* ---- Map overlays ---- */
+  .map-overlay {
+    position: absolute;
+    z-index: 10;
+    background: rgba(13, 13, 13, 0.92);
+    border: 1px solid #333;
+    backdrop-filter: blur(2px);
+  }
 }
 
 @layer utilities {
   .text-green { color: #7ddf7d; }
   .text-red { color: #df7d7d; }
   .text-yellow { color: #dfdf7d; }
+  .bg-yellow { background-color: #dfdf7d; }
   .text-blue { color: #7d9fdf; }
   .text-orange { color: #dfaf7d; }
   .text-muted { color: #666; }
@@ -245,4 +316,17 @@
   .bg-dark { background: #0d0d0d; }
   .bg-panel { background: #111; }
   .border-subtle { border-color: #333; }
+
+  /* Subtle fade for newly-arrived news items. */
+  @keyframes news-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-news-in {
+    animation: news-in 0.25s ease-out;
+  }
 }
+
+
+

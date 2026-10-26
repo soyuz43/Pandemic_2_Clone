@@ -105,10 +105,20 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
             <span className="data-value text-red">{closedCountries}/{gameState.countries.length}</span>
           </div>
           <div className="data-row">
-            <span className="data-label">Airports / Seaports Shut</span>
-              <span className="data-value text-red">
-                {gameState.closedAirports.length} <PlaneIcon size={10} className="inline" /> / {gameState.closedSeaports.length} <ShipIcon size={10} className="inline" />
-              </span>
+            <span className="data-label flex items-center gap-1">
+              <PlaneIcon size={10} className="inline" /> Airports Shut
+            </span>
+            <span className="data-value text-red">
+              {gameState.closedAirports.length}/{gameState.countries.length}
+            </span>
+          </div>
+          <div className="data-row">
+            <span className="data-label flex items-center gap-1">
+              <ShipIcon size={10} className="inline" /> Seaports Sealed
+            </span>
+            <span className="data-value text-red">
+              {gameState.closedSeaports.length}/{gameState.countries.length}
+            </span>
           </div>
         </div>
 
@@ -228,14 +238,7 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
               <span className="data-label">Ships at Sea</span>
               <span className="data-value text-blue">{formatNumber(gameState.inTransitShips)}</span>
             </div>
-            <div className="data-row">
-              <span className="data-label">Airports Shut</span>
-              <span className="data-value text-red">{gameState.closedAirports.length}/{gameState.countries.length}</span>
-            </div>
-            <div className="data-row">
-              <span className="data-label">Seaports Sealed</span>
-              <span className="data-value text-red">{gameState.closedSeaports.length}/{gameState.countries.length}</span>
-            </div>
+
           </div>
         </div>
 
@@ -296,3 +299,4 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
     </div>
   );
 }
+

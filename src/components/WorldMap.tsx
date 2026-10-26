@@ -78,7 +78,7 @@ function getCountryColor(country: Country): string {
   if (country.closed) return '#4a4a4a';
   if (country.dead > country.population * 0.5) return '#1a0000';
   if (country.infected <= 0) return '#2d5a27';
-  
+
   const infectionRatio = country.infected / country.population;
   if (infectionRatio > 0.5) return '#8b0000';
   if (infectionRatio > 0.2) return '#cc3300';
@@ -206,6 +206,7 @@ export default function WorldMap({
   const [hoveredRouteId, setHoveredRouteId] = useState<string | null>(null);
   const [showTravel, setShowTravel] = useState(true);
   const [travelFilter, setTravelFilter] = useState<TravelFilter>('all');
+  const [showLegend, setShowLegend] = useState(true);
 
   const countryLookup = useMemo(() => {
     const lookup: Record<string, Country> = {};
@@ -285,6 +286,10 @@ export default function WorldMap({
     setContextMenu({ visible: false, x: 0, y: 0, countryId: null });
   };
 
+  // The hover tooltip lives in the top-left corner; hide the route legend
+  // while it is showing so the two never overlap.
+  const tooltipVisible = (!!hoveredRoute || !!hoveredCountryData) && !contextMenu.visible;
+
   return (
     <div className="panel h-full relative" onClick={closeContextMenu}>
       <ComposableMap
@@ -304,7 +309,7 @@ export default function WorldMap({
                 const isSelected = countryId === selectedCountry;
                 const isStart = countryId === startCountry;
                 const isHovered = countryId === hoveredCountry;
-                
+
                 let fillColor = '#1a2a1a';
                 let strokeColor = '#0a1a0a';
                 let strokeWidth = 0.3;
@@ -412,8 +417,8 @@ export default function WorldMap({
           {showTravel && countries.map(c => {
             const pos = NODE_POS[c.id];
             if (!pos) return null;
-            const airportShut = closedAirportSet.has(c.id) || c.closed;
-            const portShut = closedSeaportSet.has(c.id) || c.closed;
+            const airportShut = closedAirportSet.has(c.id);
+            const portShut = closedSeaportSet.has(c.id);
             return (
               <Marker key={`mk-${c.id}`} coordinates={[pos[0], pos[1] - 2.5]} style={{ pointerEvents: 'none' }}>
                 <g transform="translate(-8 -6)">
@@ -433,8 +438,8 @@ export default function WorldMap({
         </ZoomableGroup>
       </ComposableMap>
 
-      {/* Travel overlay controls */}
-      <div className="absolute top-2 right-2 flex gap-1 z-10">
+      {/* Travel overlay controls — top right */}
+      <div className="absolute top-2 right-2 flex gap-1 z-20">
         <button
           className={`btn text-[9px] px-2 py-0.5 ${showTravel ? 'btn-primary' : ''}`}
           onClick={() => setShowTravel(v => !v)}
@@ -451,6 +456,7 @@ export default function WorldMap({
             key={f}
             className={`btn text-[9px] px-2 py-0.5 ${travelFilter === f ? 'btn-primary' : ''}`}
             onClick={() => setTravelFilter(f)}
+            title={`Show ${f === 'all' ? 'all' : f} routes only`}
           >
             {f === 'all' ? 'All' : (
               <span className="flex items-center gap-1">
@@ -462,18 +468,19 @@ export default function WorldMap({
         ))}
       </div>
 
-      {showTravel && (
-        <div className="absolute top-10 left-2 panel p-2 text-[9px] leading-relaxed pointer-events-none">
+      {/* Route legend — top left, below the hover tooltip */}
+      {showTravel && showLegend && !tooltipVisible && (
+        <div className="absolute top-2 left-2 map-overlay px-2 py-1.5 text-[9px] leading-relaxed pointer-events-none">
           <div><span className="text-blue">━</span> Blue / teal: open air / sea route</div>
           <div><span className="text-red">━</span> Red / orange: infected endpoint</div>
           <div><span className="text-dim">┄</span> Gray dashed: route closed</div>
-          <div className="text-dim mt-1">Icons show live traffic; hover a line for route details</div>
+          <div className="text-dim mt-1">Hover a line for route details</div>
         </div>
       )}
 
       {/* Hover tooltip */}
       {hoveredRoute && !contextMenu.visible ? (
-        <div className="tooltip top-2 left-2 pointer-events-none">
+        <div className="tooltip top-2 left-2 z-20 pointer-events-none">
           <div className="font-bold text-green mb-1">
             {namedRouteById.has(hoveredRoute.id)
               ? `${namedRouteById.get(hoveredRoute.id)!.fromCity} → ${namedRouteById.get(hoveredRoute.id)!.toCity}`
@@ -496,7 +503,7 @@ export default function WorldMap({
           </div>
         </div>
       ) : hoveredCountryData && !contextMenu.visible ? (
-        <div className="tooltip top-2 left-2">
+        <div className="tooltip top-2 left-2 z-20">
           <div className="font-bold text-green mb-1">{hoveredCountryData.name}</div>
           <div className="space-y-0.5">
             <div>Pop: {(hoveredCountryData.population / 1000000).toFixed(1)}M</div>
@@ -557,11 +564,11 @@ export default function WorldMap({
             <div className="context-menu-item text-dim">
               Wealth: {country.wealth}
             </div>
-            {country.closed && (
-              <div className="context-menu-item text-red">[BORDERS CLOSED]</div>
-            )}
             {closedAirportSet.has(country.id) && (
               <div className="context-menu-item text-dim flex items-center gap-1"><PlaneIcon size={10} /> Airports shut</div>
+            )}
+            {country.closed && (
+              <div className="context-menu-item text-red">Borders closed</div>
             )}
             {closedSeaportSet.has(country.id) && (
               <div className="context-menu-item text-dim flex items-center gap-1"><ShipIcon size={10} /> Seaports quarantined</div>
@@ -602,9 +609,9 @@ export default function WorldMap({
         );
       })()}
 
-      {/* Selected country info panel */}
+      {/* Selected country info panel — bottom right, clear of the map controls */}
       {selectedCountryData && (
-        <div className="absolute top-2 right-2 panel p-2 text-[10px] min-w-[160px]">
+        <div className="absolute bottom-8 right-2 z-20 map-overlay p-2 text-[10px] min-w-[160px]">
           <div className="font-bold text-green mb-1 border-b border-subtle pb-1">
             {selectedCountryData.name}
             {selectedCountryData.closed && <span className="text-red ml-2">[CLOSED]</span>}
@@ -638,24 +645,36 @@ export default function WorldMap({
         </div>
       )}
 
-      {/* Legend */}
-      <div className="absolute bottom-2 left-2 panel p-2 text-[9px]">
-        <div className="font-bold mb-1 text-dim uppercase tracking-wider">Infection</div>
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#1a2a1a]"></span> Untracked</div>
-          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#2d5a27]"></span> Clean</div>
-          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#ffdd00]"></span> Low</div>
-          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#ff6600]"></span> Medium</div>
-          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#cc3300]"></span> High</div>
-          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#8b0000]"></span> Critical</div>
-          <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#4a4a4a]"></span> Closed</div>
+      {/* Infection legend — bottom left */}
+      <div className="absolute bottom-2 left-2 map-overlay px-2 py-1.5 text-[9px]">
+        <div className="font-bold mb-1 text-dim uppercase tracking-wider">
+          Infection
+          <button
+            onClick={() => setShowLegend(v => !v)}
+            className="ml-2 text-muted hover:text-dim normal-case tracking-normal"
+            title={showLegend ? 'Hide legend' : 'Show legend'}
+          >
+            {showLegend ? '−' : '+'}
+          </button>
         </div>
+        {showLegend && (
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+            <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#1a2a1a] border border-[#333]"></span> Untracked</div>
+            <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#2d5a27]"></span> Clean</div>
+            <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#ffdd00]"></span> Low</div>
+            <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#ff6600]"></span> Medium</div>
+            <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#cc3300]"></span> High</div>
+            <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#8b0000]"></span> Critical</div>
+            <div className="flex items-center gap-1"><span className="w-2 h-2 bg-[#4a4a4a]"></span> Closed</div>
+          </div>
+        )}
       </div>
 
       {/* Controls hint */}
-      <div className="absolute bottom-2 right-2 panel px-2 py-1 text-[9px] text-dim">
+      <div className="absolute bottom-2 right-2 map-overlay px-2 py-1 text-[9px] text-dim">
         Scroll: zoom • Drag: pan • Right-click: info
       </div>
     </div>
   );
 }
+
