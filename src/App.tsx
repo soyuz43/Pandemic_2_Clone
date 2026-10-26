@@ -10,7 +10,7 @@ import GameOverScreen from './components/GameOverScreen';
 import HelpOverlay from './components/HelpOverlay';
 
 export default function App() {
-  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions, closeBorders, closeAirports, closeSeaports } = useGameState();
+  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions } = useGameState();
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [showStartScreen, setShowStartScreen] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -87,11 +87,10 @@ export default function App() {
               selectedCountry={selectedCountryId}
               onSelectCountry={setSelectedCountryId}
               startCountry={gameState.startCountry}
-              onCloseBorders={closeBorders}
-              onCloseAirports={closeAirports}
-              onCloseSeaports={closeSeaports}
               closedAirports={gameState.closedAirports}
               closedSeaports={gameState.closedSeaports}
+              waterRegions={gameState.waterRegions}
+              waterTransmission={gameState.waterTransmission}
             />
           </div>
           <div className="h-36 flex-shrink-0">

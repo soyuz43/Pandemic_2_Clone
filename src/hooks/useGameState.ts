@@ -73,7 +73,6 @@ const WATER_SPREAD_RATE = 0.001;
 // Travel network tuning (fictional game values)
 const AIR_BASE_POWER = 0.6;   // baseline flight-spreading power of any pathogen
 const SEA_BASE_POWER = 0.4;   // baseline shipping-spreading power
-const OUTBREAK_VISIBILITY_THRESHOLD = 0.35; // visible outbreaks trigger automatic closures
 
 export function useGameState() {
   const [gameState, setGameState] = useState<GameState>({
@@ -184,17 +183,20 @@ export function useGameState() {
         ...prev,
         dnaPoints: prev.dnaPoints - adjustedCost,
         unlockedEvolutions: [...prev.unlockedEvolutions, evolutionId],
-        infectivity: Math.min(1, prev.infectivity + (evo.effect.infectivity || 0)),
-        severity: Math.min(1, prev.severity + (evo.effect.severity || 0)),
-        lethality: Math.min(1, prev.lethality + (evo.effect.lethality || 0)),
-        heatResistance: Math.min(1, prev.heatResistance + (evo.effect.heatResistance || 0)),
-        coldResistance: Math.min(1, prev.coldResistance + (evo.effect.coldResistance || 0)),
-        drugResistance: Math.min(1, prev.drugResistance + (evo.effect.drugResistance || 0)),
+        // Clamp every stat to its valid range. Trade-off evolutions apply
+        // negative deltas, so a lower bound is required to avoid negative
+        // infectivity / transmission (which would break the spread math).
+        infectivity: Math.max(0, Math.min(1, prev.infectivity + (evo.effect.infectivity || 0))),
+        severity: Math.max(0, Math.min(1, prev.severity + (evo.effect.severity || 0))),
+        lethality: Math.max(0, Math.min(1, prev.lethality + (evo.effect.lethality || 0))),
+        heatResistance: Math.max(0, Math.min(1, prev.heatResistance + (evo.effect.heatResistance || 0))),
+        coldResistance: Math.max(0, Math.min(1, prev.coldResistance + (evo.effect.coldResistance || 0))),
+        drugResistance: Math.max(0, Math.min(1, prev.drugResistance + (evo.effect.drugResistance || 0))),
         visibility: Math.min(1, Math.max(0, prev.visibility + visibilityGain - (evo.effect.stealth || 0))),
-        stealth: Math.min(1, prev.stealth + (evo.effect.stealth || 0)),
-        airTransmission: prev.airTransmission + (evo.effect.airTransmission || 0),
-        seaTransmission: prev.seaTransmission + (evo.effect.seaTransmission || 0),
-        waterTransmission: Math.min(2, prev.waterTransmission + (evo.effect.waterTransmission || 0)),
+        stealth: Math.max(0, Math.min(1, prev.stealth + (evo.effect.stealth || 0))),
+        airTransmission: Math.max(0, prev.airTransmission + (evo.effect.airTransmission || 0)),
+        seaTransmission: Math.max(0, prev.seaTransmission + (evo.effect.seaTransmission || 0)),
+        waterTransmission: Math.max(0, Math.min(2, prev.waterTransmission + (evo.effect.waterTransmission || 0))),
         news: newNews.slice(0, 50),
       };
     });
@@ -296,9 +298,12 @@ export function useGameState() {
         climateMod = 0.9 + climateMod * 0.1;
 
         const healthyPop = country.population - country.infected - country.dead - country.recovered;
-        if (healthyPop <= 0) return;
-
-        const newInfections = Math.min(healthyPop, country.infected * infectionRate * climateMod * BASE_SPREAD_RATE * prev.gameSpeed);
+        // Only seed NEW infections while a susceptible pool remains. We must NOT
+        // early-return when the healthy pool is exhausted: the infected still need
+        // to die and recover, otherwise infected/dead tallies freeze (nobody dies).
+        const newInfections = healthyPop > 0
+          ? Math.min(healthyPop, country.infected * infectionRate * climateMod * BASE_SPREAD_RATE * prev.gameSpeed)
+          : 0;
         country.infected += newInfections;
         newInfectionsToday += newInfections;
 
@@ -375,41 +380,48 @@ export function useGameState() {
         newDna + Math.min(DNA_PER_TICK_CAP, (caseDna + deathDna) * diseaseConfig.dnaMultiplier) * dnaDiminishingReturns,
       );
 
-      // Countries may close borders based on visibility (reduced by stealth).
-      // Visible outbreaks ALSO trigger automatic airport & seaport closures —
-      // the classic "panic response" that strangles the travel network.
+      // PANIC RESPONSE — countries react once their OWN outbreak is large in
+      // absolute terms (hundreds of thousands of infected), not on tiny
+      // percentages. Wealthier nations detect and react sooner; poor nations
+      // only move once the caseload is catastrophic. High visibility (low
+      // stealth) makes detection faster.
       const effectiveVisibility = Math.max(0, prev.visibility - prev.stealth * 0.8);
+      // Detection multiplier: how readily cases are noticed (0.4 invisible .. 1.3 obvious).
+      const detect = 0.4 + effectiveVisibility * 0.9;
       newCountries.forEach(country => {
-        const wealthMod = country.wealth === 'wealthy' ? 0.3 : country.wealth === 'developing' ? 0.15 : 0.05;
-        const outbreakRatio = country.infected / country.population;
+        const wealthMod = country.wealth === 'wealthy' ? 1.0 : country.wealth === 'developing' ? 0.5 : 0.25;
+        const infected = country.infected;
 
-        // Automatic airport closure: high local outbreak + disease is visible.
-        if (!closedAirports.has(country.id) && outbreakRatio > 0.02 &&
-            effectiveVisibility > OUTBREAK_VISIBILITY_THRESHOLD &&
-            Math.random() < wealthMod * 0.3 * prev.gameSpeed) {
-          closedAirports.add(country.id);
-          newNews.push({
-            day: prev.day,
-            text: `${country.name} has shut its airports after visible outbreaks! ✈️🚫`,
-            type: 'warning',
-          });
+        // Automatic airport closure: starts once a country has a serious
+        // caseload (~150k infected) and ramps up as cases climb into the millions.
+        if (!closedAirports.has(country.id) && infected >= 150_000) {
+          const intensity = Math.min(1, (infected - 150_000) / 850_000) * wealthMod * detect;
+          if (Math.random() < intensity * 0.25 * prev.gameSpeed) {
+            closedAirports.add(country.id);
+            newNews.push({
+              day: prev.day,
+              text: `${country.name} has shut its airports amid ${Math.floor(infected / 1000)}k infections! ✈️🚫`,
+              type: 'warning',
+            });
+          }
         }
 
-        // Automatic seaport closure: rarer — only at severe outbreak levels.
-        if (!closedSeaports.has(country.id) && outbreakRatio > 0.10 &&
-            effectiveVisibility > OUTBREAK_VISIBILITY_THRESHOLD + 0.15 &&
-            Math.random() < wealthMod * 0.15 * prev.gameSpeed) {
-          closedSeaports.add(country.id);
-          newNews.push({
-            day: prev.day,
-            text: `${country.name} has sealed its seaports to incoming cargo! ⚓🚫`,
-            type: 'warning',
-          });
+        // Automatic seaport closure: kicks in at a heavier caseload (~400k).
+        if (!closedSeaports.has(country.id) && infected >= 400_000) {
+          const intensity = Math.min(1, (infected - 400_000) / 1_600_000) * wealthMod * detect;
+          if (Math.random() < intensity * 0.2 * prev.gameSpeed) {
+            closedSeaports.add(country.id);
+            newNews.push({
+              day: prev.day,
+              text: `${country.name} has sealed its seaports to incoming cargo! ⚓🚫`,
+              type: 'warning',
+            });
+          }
         }
 
         if (country.closed) return;
         const closeChance = effectiveVisibility * wealthMod * 0.02 * prev.gameSpeed;
-        if (country.infected > country.population * 0.05 && Math.random() < closeChance) {
+        if (country.infected >= 750_000 && Math.random() < closeChance) {
           country.closed = true;
           newNews.push({
             day: prev.day,
@@ -560,78 +572,6 @@ export function useGameState() {
     setGameState(prev => ({ ...prev, isRunning: !prev.isRunning }));
   }, []);
 
-  const closeBorders = useCallback((countryId: string) => {
-    setGameState(prev => {
-      const country = prev.countries.find(c => c.id === countryId);
-      if (!country || country.closed) return prev;
-      
-      const newCountries = prev.countries.map(c => 
-        c.id === countryId ? { ...c, closed: true } : c
-      );
-
-      const newNews = [...prev.news];
-      newNews.unshift({
-        day: prev.day,
-        text: `You have closed ${country.name}'s borders! Flights and shipping suspended.`,
-        type: 'warning',
-      });
-
-      return {
-        ...prev,
-        countries: newCountries,
-        news: newNews.slice(0, 50),
-      };
-    });
-  }, []);
-
-  // Emergency airport shutdown (cheaper than full border closure, air only).
-  const closeAirports = useCallback((countryId: string) => {
-    setGameState(prev => {
-      const country = prev.countries.find(c => c.id === countryId);
-      if (!country || prev.closedAirports.includes(countryId)) return prev;
-      const cost = country.wealth === 'wealthy' ? 8 : country.wealth === 'developing' ? 6 : 4;
-      if (prev.dnaPoints < cost) return prev;
-
-      const newNews = [...prev.news];
-      newNews.unshift({
-        day: prev.day,
-        text: `${country.name} has shut its airports by emergency decree. ✈️🚫 (-${cost} DNA)`,
-        type: 'warning',
-      });
-
-      return {
-        ...prev,
-        dnaPoints: prev.dnaPoints - cost,
-        closedAirports: [...prev.closedAirports, countryId],
-        news: newNews.slice(0, 50),
-      };
-    });
-  }, []);
-
-  // Emergency seaport quarantine (sea only).
-  const closeSeaports = useCallback((countryId: string) => {
-    setGameState(prev => {
-      const country = prev.countries.find(c => c.id === countryId);
-      if (!country || prev.closedSeaports.includes(countryId)) return prev;
-      const cost = country.wealth === 'wealthy' ? 6 : country.wealth === 'developing' ? 5 : 3;
-      if (prev.dnaPoints < cost) return prev;
-
-      const newNews = [...prev.news];
-      newNews.unshift({
-        day: prev.day,
-        text: `${country.name} has quarantined its seaports — no cargo boarding. ⚓🚫 (-${cost} DNA)`,
-        type: 'warning',
-      });
-
-      return {
-        ...prev,
-        dnaPoints: prev.dnaPoints - cost,
-        closedSeaports: [...prev.closedSeaports, countryId],
-        news: newNews.slice(0, 50),
-      };
-    });
-  }, []);
-
   // Game loop
   useEffect(() => {
     if (gameState.isRunning && !gameState.gameOver) {
@@ -661,8 +601,5 @@ export function useGameState() {
     setGameSpeed,
     togglePause,
     getAvailableEvolutions,
-    closeBorders,
-    closeAirports,
-    closeSeaports,
   };
 }

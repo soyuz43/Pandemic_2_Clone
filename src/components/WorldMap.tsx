@@ -8,6 +8,7 @@ import {
   Line,
 } from 'react-simple-maps';
 import { Country } from '../data/countries';
+import type { WaterRegionState } from '../data/waterSystems';
 import { allRoutes, namedRoutes } from '../data/routes';
 
 interface WorldMapProps {
@@ -15,11 +16,10 @@ interface WorldMapProps {
   selectedCountry: string | null;
   onSelectCountry: (id: string) => void;
   startCountry: string | null;
-  onCloseBorders?: (id: string) => void;
-  onCloseAirports?: (id: string) => void;
-  onCloseSeaports?: (id: string) => void;
   closedAirports?: string[];
   closedSeaports?: string[];
+  waterRegions?: WaterRegionState[];
+  waterTransmission?: number;
 }
 
 interface ContextMenuState {
@@ -109,8 +109,8 @@ const namedRouteById = new Map(namedRoutes.map(route => [route.id, route]));
 
 export default function WorldMap({
   countries, selectedCountry, onSelectCountry, startCountry,
-  onCloseBorders, onCloseAirports, onCloseSeaports,
   closedAirports = [], closedSeaports = [],
+  waterRegions = [], waterTransmission = 0,
 }: WorldMapProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -360,6 +360,9 @@ export default function WorldMap({
         const country = countries.find(c => c.id === contextMenu.countryId);
         if (!country) return null;
 
+        const countryWaterRegions = waterRegions.filter(r => r.countryId === country.id);
+        const showWater = countryWaterRegions.length > 0 && waterTransmission > 0;
+
         return (
           <div
             className="context-menu"
@@ -388,55 +391,48 @@ export default function WorldMap({
             <div className="context-menu-item text-dim">
               Wealth: {country.wealth}
             </div>
-            {country.closed ? (
-              <div className="context-menu-item text-red">
-                [BORDERS CLOSED]
-              </div>
-            ) : (
-              <button
-                className="context-menu-item w-full text-left text-yellow hover:bg-yellow/10 cursor-pointer"
-                onClick={() => {
-                  if (onCloseBorders) {
-                    onCloseBorders(country.id);
-                    closeContextMenu();
-                  }
-                }}
-              >
-                🔒 Close Borders (Free)
-              </button>
+            {country.closed && (
+              <div className="context-menu-item text-red">[BORDERS CLOSED]</div>
             )}
-            {!country.closed && !closedAirportSet.has(country.id) && onCloseAirports && (
-              <button
-                className="context-menu-item w-full text-left text-blue hover:bg-blue/10 cursor-pointer"
-                onClick={() => {
-                  onCloseAirports(country.id);
-                  closeContextMenu();
-                }}
-              >
-                ✈️🚫 Shut Airports ({country.wealth === 'wealthy' ? 8 : country.wealth === 'developing' ? 6 : 4} DNA)
-              </button>
-            )}
-            {closedAirportSet.has(country.id) && !country.closed && (
+            {closedAirportSet.has(country.id) && (
               <div className="context-menu-item text-dim">✈️ Airports shut</div>
             )}
-            {!country.closed && !closedSeaportSet.has(country.id) && onCloseSeaports && (
-              <button
-                className="context-menu-item w-full text-left text-blue hover:bg-blue/10 cursor-pointer"
-                onClick={() => {
-                  onCloseSeaports(country.id);
-                  closeContextMenu();
-                }}
-              >
-                ⚓🚫 Quarantine Seaports ({country.wealth === 'wealthy' ? 6 : country.wealth === 'developing' ? 5 : 3} DNA)
-              </button>
-            )}
-            {closedSeaportSet.has(country.id) && !country.closed && (
+            {closedSeaportSet.has(country.id) && (
               <div className="context-menu-item text-dim">⚓ Seaports quarantined</div>
+            )}
+            {showWater && (
+              <div className="context-menu-item">
+                <div className="font-bold text-blue border-b border-subtle mb-1">Water Systems</div>
+                {countryWaterRegions.map(region => {
+                  const pct = Math.round(region.contamination * 100);
+                  const fillColor = pct >= 100 ? '#df7d7d' : pct > 0 ? '#e0964c' : '#7ddf7d';
+                  const textClass = pct >= 100 ? 'text-red' : pct > 0 ? 'text-yellow' : 'text-green';
+                  return (
+                    <div key={region.id} className="mb-1">
+                      <div className="flex justify-between">
+                        <span className="text-dim">{region.name}</span>
+                        <span className={textClass}>{pct}%</span>
+                      </div>
+                      <div className="h-1 bg-panel rounded overflow-hidden">
+                        <div
+                          className="h-full"
+                          style={{ width: `${pct}%`, backgroundColor: fillColor }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {!showWater && countryWaterRegions.length > 0 && (
+              <div className="context-menu-item text-dim">
+                Water systems dormant (no waterborne evolution)
+              </div>
             )}
             <div className="context-menu-item text-dim">
               Connections: {country.connections.length}
             </div>
-          </div>
+            </div>
         );
       })()}
 
