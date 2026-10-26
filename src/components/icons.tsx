@@ -5,17 +5,10 @@ export function PlaneIcon({ className = '', size = 14 }: { className?: string; s
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      fill="currentColor"
       aria-hidden="true"
     >
-      <path d="M10.5 20.5 12 19l1.5 1.5-1.5-1-1.5 1Z" />
-      <path d="M2 13h20" />
-      <path d="M12 4.5 22 13l-4 .8L12 8 6 13.8 2 13l10-8.5Z" />
-      <path d="M9 14v6l3-2 3 2v-6" />
+      <path d="M12 2 9.5 10 2 14v2l7.5-2.5V19l-2 1.5V22l4.5-1 4.5 1v-1.5L14.5 19v-5.5L22 16v-2l-7.5-4L12 2Z" />
     </svg>
   );
 }
