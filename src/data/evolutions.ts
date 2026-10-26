@@ -72,8 +72,8 @@ export const evolutions: Evolution[] = [
   // Resilience, climate, stealth, and a set of deliberate trade-off specializations.
   // --- Climate branch ---
   { id: 'cold1',        name: 'Cold Resistance I',  branch: 'climate', tier: 0, description: '+25% cold resistance', category: 'ability', cost: 5,  effect: { coldResistance: 0.25 } },
-  { id: 'cold2',        name: 'Cold Resistance II', branch: 'climate', tier: 1, description: '+50% cold resistance', category: 'ability', cost: 15, effect: { coldResistance: 0.50 }, requires: ['cold1'] },
   { id: 'heat1',        name: 'Heat Resistance I',  branch: 'climate', tier: 0, description: '+25% heat resistance', category: 'ability', cost: 5,  effect: { heatResistance: 0.25 } },
+  { id: 'cold2',        name: 'Cold Resistance II', branch: 'climate', tier: 1, description: '+50% cold resistance', category: 'ability', cost: 15, effect: { coldResistance: 0.50 }, requires: ['cold1'] },
   { id: 'heat2',        name: 'Heat Resistance II', branch: 'climate', tier: 1, description: '+50% heat resistance', category: 'ability', cost: 15, effect: { heatResistance: 0.50 }, requires: ['heat1'] },
   { id: 'frost_spec',   name: 'Frost Specialist',   branch: 'climate', tier: 2, description: 'Mastery of cold, but weak in heat', category: 'ability', cost: 30, effect: { coldResistance: 0.50, heatResistance: -0.40 }, requires: ['cold2'], tradeoff: true, drawback: 'Loses most heat tolerance.' },
   { id: 'thermal_spec', name: 'Thermal Specialist', branch: 'climate', tier: 2, description: 'Mastery of heat, but weak in cold', category: 'ability', cost: 30, effect: { heatResistance: 0.50, coldResistance: -0.40 }, requires: ['heat2'], tradeoff: true, drawback: 'Loses most cold tolerance.' },

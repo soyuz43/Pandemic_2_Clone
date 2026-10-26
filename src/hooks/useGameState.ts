@@ -5,6 +5,7 @@ import {
   applyEvolution,
   createInitialState,
   tick as simulateTick,
+  evolutionCost,
   INITIAL_DNA,
   AIR_BASE_POWER,
   SEA_BASE_POWER,
@@ -93,6 +94,11 @@ export function useGameState() {
     };
   }, [gameState.isRunning, gameState.gameOver, tick]);
 
+  /** Effective cost of an evolution for the current disease type. */
+  const getEvolutionCost = useCallback((evo: Evolution): number => {
+    return evolutionCost(evo, gameState.diseaseType);
+  }, [gameState.diseaseType]);
+
   const getAvailableEvolutions = useCallback((): Evolution[] => {
     return evolutions.filter(e => {
       if (gameState.unlockedEvolutions.includes(e.id)) return false;
@@ -109,5 +115,6 @@ export function useGameState() {
     setGameSpeed,
     togglePause,
     getAvailableEvolutions,
+    getEvolutionCost,
   };
 }

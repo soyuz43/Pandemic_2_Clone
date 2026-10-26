@@ -10,7 +10,7 @@ import GameOverScreen from './components/GameOverScreen';
 import HelpOverlay from './components/HelpOverlay';
 
 export default function App() {
-  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions } = useGameState();
+  const { gameState, startGame, evolve, setGameSpeed, togglePause, getAvailableEvolutions, getEvolutionCost } = useGameState();
   const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
   const [showStartScreen, setShowStartScreen] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -76,6 +76,7 @@ export default function App() {
             gameState={gameState}
             onEvolve={evolve}
             getAvailableEvolutions={getAvailableEvolutions}
+            getEvolutionCost={getEvolutionCost}
           />
         </div>
 

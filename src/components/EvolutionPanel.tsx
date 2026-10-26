@@ -6,6 +6,7 @@ interface EvolutionPanelProps {
   gameState: GameState;
   onEvolve: (id: string) => void;
   getAvailableEvolutions: () => Evolution[];
+  getEvolutionCost: (evo: Evolution) => number;
 }
 
 // Branch display info (label + accent color class).
@@ -21,11 +22,12 @@ const BRANCHES: { id: string; label: string; color: string }[] = [
   { id: 'specialist', label: 'Specializations',color: 'text-orange-400' },
 ];
 
-function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
+function EvolutionCard({ evo, unlocked, available, canAfford, cost, onEvolve }: {
   evo: Evolution;
   unlocked: boolean;
   available: boolean;
   canAfford: boolean;
+  cost: number;
   onEvolve: (id: string) => void;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -57,7 +59,7 @@ function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
         </span>
         {!unlocked && (
           <span className={`text-[10px] font-mono ${canAfford ? 'text-yellow' : 'text-red'}`}>
-            {evo.cost}
+            {cost}
           </span>
         )}
         {unlocked && <span className="text-green text-[10px]">✓</span>}
@@ -81,7 +83,7 @@ function EvolutionCard({ evo, unlocked, available, canAfford, onEvolve }: {
   );
 }
 
-export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolutions }: EvolutionPanelProps) {
+export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolutions, getEvolutionCost }: EvolutionPanelProps) {
   const available = getAvailableEvolutions();
 
   return (
@@ -101,16 +103,20 @@ export default function EvolutionPanel({ gameState, onEvolve, getAvailableEvolut
                 {branch.label}
               </div>
               <div className="space-y-1">
-                {items.map(evo => (
-                  <EvolutionCard
-                    key={evo.id}
-                    evo={evo}
-                    unlocked={gameState.unlockedEvolutions.includes(evo.id)}
-                    available={available.some(a => a.id === evo.id)}
-                    canAfford={gameState.dnaPoints >= evo.cost}
-                    onEvolve={onEvolve}
-                  />
-                ))}
+                {items.map(evo => {
+                  const cost = getEvolutionCost(evo);
+                  return (
+                    <EvolutionCard
+                      key={evo.id}
+                      evo={evo}
+                      unlocked={gameState.unlockedEvolutions.includes(evo.id)}
+                      available={available.some(a => a.id === evo.id)}
+                      canAfford={gameState.dnaPoints >= cost}
+                      cost={cost}
+                      onEvolve={onEvolve}
+                    />
+                  );
+                })}
               </div>
             </div>
           );
