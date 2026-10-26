@@ -15,7 +15,7 @@ import type { GameState, NewsItem } from '../lib/gameState';
 export type { GameState, NewsItem } from '../lib/gameState';
 
 /** Wall-clock duration of one simulation day at 1x speed, in milliseconds. */
-export const BASE_DAY_DURATION_MS = 30_000;
+export const BASE_DAY_DURATION_MS = 8_000;
 export const GAME_SPEEDS = [1, 2, 3, 5] as const;
 
 export function useGameState() {

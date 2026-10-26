@@ -6,10 +6,12 @@ import {
   ZoomableGroup,
   Marker,
   Line,
+  useMapContext,
 } from 'react-simple-maps';
 import { Country } from '../data/countries';
 import type { WaterRegionState } from '../data/waterSystems';
 import { allRoutes, namedRoutes, type TradeRoute } from '../data/routes';
+import { getProjectedTravelHeading, interpolateGreatCircle } from '../lib/travel';
 import { PlaneIcon, ShipIcon } from './icons';
 
 interface WorldMapProps {
@@ -164,6 +166,30 @@ function buildTravelVehicles(routes: TradeRoute[]): TravelVehicle[] {
 }
 
 const namedRouteById = new Map(namedRoutes.map(route => [route.id, route]));
+
+function TravelVehicleMarker({ vehicle, progress }: { vehicle: TravelVehicle; progress: number }) {
+  const { projection } = useMapContext();
+  const coordinates = interpolateGreatCircle(vehicle.from, vehicle.to, progress);
+  const heading = getProjectedTravelHeading(
+    coordinates => projection(coordinates),
+    vehicle.from,
+    vehicle.to,
+    progress,
+    vehicle.reverse
+  );
+  const Icon = vehicle.kind === 'air' ? PlaneIcon : ShipIcon;
+  const rotation = heading === null ? 0 : heading + 90;
+
+  return (
+    <Marker coordinates={coordinates} style={{ pointerEvents: 'none' }}>
+      <g transform={`rotate(${rotation})`}>
+        <g transform="scale(0.42) translate(-11 -11)">
+          <Icon size={22} className={vehicle.kind === 'air' ? 'text-red' : 'text-orange'} />
+        </g>
+      </g>
+    </Marker>
+  );
+}
 
 export default function WorldMap({
   countries, selectedCountry, onSelectCountry, startCountry,
@@ -364,30 +390,21 @@ export default function WorldMap({
             const route = visibleRoutes.find(item => item.id === vehicle.routeId);
             if (!route) return null;
 
-            const isAir = vehicle.kind === 'air';
             const shut =
-              closedCountrySet.has(route.from) || closedCountrySet.has(route.to) || (isAir
+              closedCountrySet.has(route.from) || closedCountrySet.has(route.to) || (vehicle.kind === 'air'
                 ? closedAirportSet.has(route.from) || closedAirportSet.has(route.to)
                 : closedSeaportSet.has(route.from) || closedSeaportSet.has(route.to));
             if (shut) return null;
 
             const rawProgress = vehicleProgressRef.current.get(vehicle.id) ?? vehicle.progress;
             const progress = vehicle.reverse ? 1 - rawProgress : rawProgress;
-            const x = vehicle.from[0] + (vehicle.to[0] - vehicle.from[0]) * progress;
-            const y = vehicle.from[1] + (vehicle.to[1] - vehicle.from[1]) * progress;
-            const dx = vehicle.to[0] - vehicle.from[0];
-            const dy = vehicle.to[1] - vehicle.from[1];
-            const rotation = Math.atan2(vehicle.reverse ? -dy : dy, vehicle.reverse ? -dx : dx) * 180 / Math.PI;
-            const Icon = isAir ? PlaneIcon : ShipIcon;
 
             return (
-              <g
+              <TravelVehicleMarker
                 key={`vehicle-${vehicle.id}`}
-                transform={`translate(${x} ${y}) rotate(${rotation}) scale(0.42)`}
-                style={{ pointerEvents: 'none' }}
-              >
-                <Icon size={22} className={isAir ? 'text-red' : 'text-orange'} />
-              </g>
+                vehicle={vehicle}
+                progress={progress}
+              />
             );
           })}
 
