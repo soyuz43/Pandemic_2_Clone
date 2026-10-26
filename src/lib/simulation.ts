@@ -54,6 +54,25 @@ export const LETHALITY_RECOVERY_SUPPRESSION = 2.0;
 export const AIR_BASE_POWER = 0.6;   // baseline flight-spreading power of any pathogen
 export const SEA_BASE_POWER = 0.4;   // baseline shipping-spreading power
 
+// Panic-response thresholds. Absolute caseloads, but scaled down for small
+// populations so that tiny nations can still plausibly shut down.
+export const AIRPORT_CLOSE_THRESHOLD = 150_000;
+export const SEAPORT_CLOSE_THRESHOLD = 400_000;
+export const BORDER_CLOSE_THRESHOLD = 750_000;
+/** Fraction of a country's population that, if reached, also triggers closure. */
+export const PANIC_POPULATION_FRACTION = 0.05;
+
+/**
+ * Threshold at which a country panics and shuts a given transport corridor.
+ *
+ * Uses the absolute caseload, but never requires more than
+ * `PANIC_POPULATION_FRACTION` of the population, so small nations are not
+ * locked out of the panic response entirely.
+ */
+export function panicThreshold(population: number, absoluteThreshold: number): number {
+  return Math.min(absoluteThreshold, population * PANIC_POPULATION_FRACTION);
+}
+
 
 /** Deterministic source of randomness; injectable so runs can be reproduced. */
 export type Rng = () => number;
@@ -329,8 +348,9 @@ export function tick(prev: GameState, random: Rng): TickResult {
 
     // Automatic airport closure: starts once a country has a serious
     // caseload and ramps up as cases climb into the millions.
-    if (!closedAirports.has(country.id) && infected >= 150_000) {
-      const intensity = Math.min(1, (infected - 150_000) / 850_000) * wealthMod * detect;
+    const airportThreshold = panicThreshold(country.population, AIRPORT_CLOSE_THRESHOLD);
+    if (!closedAirports.has(country.id) && infected >= airportThreshold) {
+      const intensity = Math.min(1, (infected - airportThreshold) / 850_000) * wealthMod * detect;
       if (random() < intensity * 0.25 * prev.gameSpeed) {
         closedAirports.add(country.id);
         newNews.push({
@@ -342,8 +362,9 @@ export function tick(prev: GameState, random: Rng): TickResult {
     }
 
     // Automatic seaport closure: kicks in at a heavier caseload.
-    if (!closedSeaports.has(country.id) && infected >= 400_000) {
-      const intensity = Math.min(1, (infected - 400_000) / 1_600_000) * wealthMod * detect;
+    const seaportThreshold = panicThreshold(country.population, SEAPORT_CLOSE_THRESHOLD);
+    if (!closedSeaports.has(country.id) && infected >= seaportThreshold) {
+      const intensity = Math.min(1, (infected - seaportThreshold) / 1_600_000) * wealthMod * detect;
       if (random() < intensity * 0.2 * prev.gameSpeed) {
         closedSeaports.add(country.id);
         newNews.push({
@@ -356,7 +377,8 @@ export function tick(prev: GameState, random: Rng): TickResult {
 
     if (country.closed) return;
     const closeChance = effectiveVisibility * wealthMod * 0.02 * prev.gameSpeed;
-    if (infected >= 750_000 && random() < closeChance) {
+    const borderThreshold = panicThreshold(country.population, BORDER_CLOSE_THRESHOLD);
+    if (infected >= borderThreshold && random() < closeChance) {
       country.closed = true;
       newNews.push({
         day: prev.day,
