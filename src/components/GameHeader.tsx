@@ -1,4 +1,5 @@
 import { GameState } from '../hooks/useGameState';
+import { GAME_SPEEDS } from '../hooks/useGameState';
 
 interface GameHeaderProps {
   gameState: GameState;
@@ -55,10 +56,10 @@ export default function GameHeader({ gameState, onTogglePause, onSetSpeed, onSho
           className={`btn ${gameState.isRunning ? '' : 'btn-primary'}`}
           title={gameState.isRunning ? 'Pause (Space)' : 'Resume (Space)'}
         >
-          {gameState.isRunning ? '⏸' : '▶'}
+          {gameState.isRunning ? 'Pause' : 'Resume'}
         </button>
         
-        {[1, 2, 3].map(speed => (
+        {GAME_SPEEDS.map(speed => (
           <button
             key={speed}
             onClick={() => onSetSpeed(speed)}

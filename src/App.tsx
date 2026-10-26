@@ -45,6 +45,8 @@ export default function App() {
         setGameSpeed(2);
       } else if (e.key === '3') {
         setGameSpeed(3);
+      } else if (e.key === '4') {
+        setGameSpeed(5);
       } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         setShowHelp(true);
       } else if (e.key === 'Escape') {

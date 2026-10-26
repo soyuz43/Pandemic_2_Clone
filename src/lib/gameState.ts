@@ -41,6 +41,8 @@ export interface GameState {
   startCountry: string | null;
   closedAirports: string[];   // country ids whose airports are shut (blocks air seeding)
   closedSeaports: string[];   // country ids whose seaports are shut (blocks sea seeding)
-  activeFlights: number;      // live stats for the travel overlay / HUD
+  activeFlights: number;      // traffic volume per day for the travel overlay / HUD
   activeShips: number;
+  inTransitFlights: number;   // live airborne vehicles at this simulation instant
+  inTransitShips: number;     // live ships at sea at this simulation instant
 }

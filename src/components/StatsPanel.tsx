@@ -1,6 +1,7 @@
 import { GameState } from '../hooks/useGameState';
 import { Country } from '../data/countries';
 import { getDiseaseType } from '../data/diseaseTypes';
+import { PlaneIcon, ShipIcon } from './icons';
 
 interface StatsPanelProps {
   gameState: GameState;
@@ -105,7 +106,9 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
           </div>
           <div className="data-row">
             <span className="data-label">Airports / Seaports Shut</span>
-            <span className="data-value text-red">{gameState.closedAirports.length} ✈️ / {gameState.closedSeaports.length} ⚓</span>
+              <span className="data-value text-red">
+                {gameState.closedAirports.length} <PlaneIcon size={10} className="inline" /> / {gameState.closedSeaports.length} <ShipIcon size={10} className="inline" />
+              </span>
           </div>
         </div>
 
@@ -210,16 +213,20 @@ export default function StatsPanel({ gameState, selectedCountry }: StatsPanelPro
         {/* Travel network */}
         <div className="pt-2 border-t border-subtle">
           <div className="text-[10px] text-dim uppercase tracking-wider font-bold mb-2">
-            ✈️⚓ Travel Network
+            <span className="flex items-center gap-1">
+              <PlaneIcon size={10} />
+              <ShipIcon size={10} />
+              Travel Network
+            </span>
           </div>
           <div className="space-y-1 text-[10px]">
             <div className="data-row">
-              <span className="data-label">Active Flights/day</span>
-              <span className="data-value text-blue">{formatNumber(gameState.activeFlights)}</span>
+              <span className="data-label">Flights in Air</span>
+              <span className="data-value text-blue">{formatNumber(gameState.inTransitFlights)}</span>
             </div>
             <div className="data-row">
-              <span className="data-label">Active Shipments/day</span>
-              <span className="data-value text-blue">{formatNumber(gameState.activeShips)}</span>
+              <span className="data-label">Ships at Sea</span>
+              <span className="data-value text-blue">{formatNumber(gameState.inTransitShips)}</span>
             </div>
             <div className="data-row">
               <span className="data-label">Airports Shut</span>

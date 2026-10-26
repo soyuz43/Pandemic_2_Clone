@@ -47,7 +47,7 @@ export default function HelpOverlay({ onClose }: HelpOverlayProps) {
                 <span className="text-dim">Pause/Resume</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="kbd">1</span><span className="kbd">2</span><span className="kbd">3</span>
+                <span className="kbd">1</span><span className="kbd">2</span><span className="kbd">3</span><span className="kbd">4</span>
                 <span className="text-dim">Speed</span>
               </div>
               <div className="flex items-center gap-2">
